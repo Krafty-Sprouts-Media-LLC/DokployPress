@@ -8,6 +8,14 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.2.0] - 04/06/2026
+
+### Fixed
+- `README.md` — Corrected template Base URL and manual compose URL from `itsmereal/dokploy-wp` to `Krafty-Sprouts-Media-LLC/WPDokploystack`.
+- `blueprints/wordpress-redis-stack/docker-compose.yml` — Updated all three Docker image references (`nginx`, `wordpress`, `plugin-installer`) from `ghcr.io/itsmereal/...` to `ghcr.io/krafty-sprouts-media-llc/...` so the one-click template pulls from the org's own GHCR registry.
+
+---
+
 ## [1.1.0] - 04/06/2026
 
 ### Added
