@@ -256,6 +256,209 @@ NGINX_CLIENT_MAX_BODY_SIZE=512M
 
 ---
 
+## MariaDB & phpMyAdmin — Full Walkthrough
+
+> **Important:** MariaDB is **not a separate service you install** in Dokploy. It is already bundled in this Docker Compose stack as the `db` service. When you deploy the stack, all six containers (nginx, wordpress, db, redis, phpmyadmin, plugin-installer) start together automatically. **No separate MariaDB installation step exists.**
+
+### How Services Are Connected — Internal Networking
+
+All containers communicate over a private Docker network named `internal`. WordPress connects to MariaDB using the container name `db` as the hostname — Docker's internal DNS resolves this automatically. You never touch an IP address.
+
+```
+┌──────────────────────────────────────────────────────┐
+│               Docker "internal" network              │
+│                                                      │
+│  [nginx] ──► [wordpress / php-fpm]                   │
+│                       │                              │
+│                       ├──► [db / MariaDB] ◄── [phpmyadmin]
+│                       │                              │
+│                       └──► [redis]                   │
+│                                                      │
+│  Only nginx & phpmyadmin are reachable from outside  │
+└──────────────────────────────────────────────────────┘
+```
+
+The environment variables that wire WordPress to the database:
+
+```env
+WORDPRESS_DB_HOST=db          # Container name — Docker DNS resolves automatically
+WORDPRESS_DB_USER=wordpress
+WORDPRESS_DB_PASSWORD=<your password>
+WORDPRESS_DB_NAME=wordpress
+```
+
+No manual connection step is needed. Everything is wired by the Compose file at deploy time.
+
+### Setting Up phpMyAdmin Access
+
+1. In Dokploy → **Domains** tab of your Compose service, add:
+   - **Domain:** `pma.yourdomain.com`
+   - **Service:** `phpmyadmin`
+   - **Port:** `80`
+2. Go to **General** tab → click **Reload**.
+3. Navigate to `https://pma.yourdomain.com`.
+4. Log in:
+   - **Username:** `wordpress`
+   - **Password:** value of `MYSQL_PASSWORD`
+
+### After First Deployment
+
+The database starts empty — WordPress auto-populates it during the **WordPress setup wizard** (first visit to your domain, where you set the site title, admin username, etc.).
+
+### phpMyAdmin — Common Tasks
+
+| Task | How |
+|------|-----|
+| Browse/edit tables | Left panel → select `wordpress` database |
+| Import a `.sql` backup | **Import** tab → choose file → Go |
+| Export/backup database | **Export** tab → Quick → Go |
+| Run raw SQL | **SQL** tab |
+| Change site URL | `wordpress` → `wp_options` → edit `siteurl` and `home` rows |
+
+### Root Database Access (Advanced)
+
+```bash
+# Get into the db container
+docker exec -it <compose-name>-db-1 bash
+
+# Log in as root (enter MYSQL_ROOT_PASSWORD when prompted)
+mysql -u root -p
+
+# Inside MySQL
+SHOW DATABASES;
+CREATE DATABASE another_site;
+GRANT ALL PRIVILEGES ON another_site.* TO 'wordpress'@'%';
+FLUSH PRIVILEGES;
+```
+
+---
+
+## Renaming the Stack in Dokploy — Will It Break Updates?
+
+**Short answer: Safe for display purposes. Watch out for full redeployments after rename.**
+
+### What Renaming Changes
+
+The **display name** shown in the Dokploy UI is cosmetic. You can rename it in the service's **General** tab at any time.
+
+### What Renaming Does NOT Affect
+
+- Running containers and their internal networking
+- Domain and SSL configuration
+- Volume data (WordPress files, database, Redis — stored in named Docker volumes)
+- Future redeployments triggered from the Dokploy UI
+
+### What to Watch Out For
+
+> **Warning:** Dokploy may use the service name as the Docker project name (`COMPOSE_PROJECT_NAME`), which controls volume naming (e.g., `wordpress_data`). If a **full redeploy** is performed after renaming, Docker may treat it as a brand-new project and create empty volumes — leaving your data in the old volumes, detached.
+
+### Safe Rename Procedure
+
+1. In Dokploy → service **General** tab → edit the display name → Save.
+2. **Do not** click Redeploy immediately after renaming.
+3. The containers continue running under their existing Docker names.
+4. If you must redeploy after a rename, first run `docker volume ls` on the server to confirm volume names haven't changed, and back up your database first.
+
+---
+
+## Migrating WordPress Sites from Local Disk
+
+If your existing WordPress sites store files on local server disk (uploads, themes, plugins) rather than object storage, here is the full migration workflow.
+
+### What Needs Migrating
+
+| Component | Method |
+|-----------|--------|
+| Database | Export `.sql` → Import via phpMyAdmin or WP-CLI |
+| WordPress files (uploads, themes, plugins) | Upload via SFTP, File Browser, or WP-CLI |
+| `wp-config.php` | **Not migrated** — auto-generated from env vars by this stack |
+| Credentials/settings | Set via Dokploy environment variables at deploy time |
+
+### Step 1 — Deploy the Empty Stack First
+
+Deploy the stack as in Step 3. Complete the WordPress setup wizard with any temporary credentials. Wait until **all containers show as healthy** in Dokploy before proceeding.
+
+### Step 2 — Export the Old Database
+
+On your old server or Local by Flywheel:
+
+```bash
+# Using mysqldump
+mysqldump -u <user> -p <database_name> > site_backup.sql
+
+# Or via phpMyAdmin on old site → Export → Quick → Go
+```
+
+### Step 3 — Export WordPress Files
+
+```bash
+# Compress wp-content for transfer
+zip -r wp-content-backup.zip wp-content/uploads/ wp-content/themes/ wp-content/plugins/
+```
+
+### Step 4 — Upload Files to the New Server
+
+Use one of the file access methods in this repo's docs:
+
+- **[SFTP Setup](./sftp-setup.md)** — Best for large file transfers
+- **[File Browser Setup](./filebrowser-setup.md)** — Browser-based drag & drop
+- **[VS Code Remote Setup](./vscode-remote-setup.md)** — Best for developers
+
+Upload files into the WordPress volume at `/var/www/html/wp-content/`.
+
+### Step 5 — Import the Database
+
+**Via phpMyAdmin (best for small/medium databases):**
+1. Open `pma.yourdomain.com`
+2. Select the `wordpress` database in the left panel
+3. **Import** tab → choose `site_backup.sql` → **Go**
+
+**Via WP-CLI (recommended for large databases):**
+```bash
+# Copy the SQL file into the container
+docker cp site_backup.sql <wordpress-container-name>:/tmp/
+
+# Import it
+docker exec -it <wordpress-container-name> bash
+wp db import /tmp/site_backup.sql --allow-root
+```
+
+### Step 6 — Update the Site URL
+
+After import, the database still references your old domain. Update it with WP-CLI (this correctly handles PHP serialized data):
+
+```bash
+docker exec -it <wordpress-container-name> bash
+wp search-replace 'https://old-domain.com' 'https://new-domain.com' --allow-root
+wp cache flush --allow-root
+```
+
+Or manually in phpMyAdmin:
+- Table `wp_options` → rows `siteurl` and `home` → update both values to the new domain.
+
+### Step 7 — Fix File Permissions
+
+```bash
+docker exec -it <wordpress-container-name> bash
+chown -R www-data:www-data /var/www/html/wp-content/
+find /var/www/html/wp-content/ -type d -exec chmod 755 {} \;
+find /var/www/html/wp-content/ -type f -exec chmod 644 {} \;
+```
+
+### Step 8 — Re-activate Redis Cache
+
+```bash
+docker exec -it <wordpress-container-name> bash
+wp plugin activate redis-cache --allow-root
+wp redis enable --allow-root
+```
+
+### Note on Local Disk vs. Object Storage
+
+This stack stores `wp-content/uploads/` in the `wordpress_data` Docker volume on the **VPS disk**. This works well for most sites. To offload media to **S3 or Cloudflare R2**, install the **WP Offload Media** plugin — no changes to this stack's Docker configuration are required.
+
+---
+
 ## Related Documentation
 
 - [File Browser Setup](./filebrowser-setup.md) — Access WordPress files via a browser-based file manager

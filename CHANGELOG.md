@@ -8,6 +8,17 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.4.0] - 04/06/2026
+
+### Added
+- `docs/hosting-guide.md` — Major expansion with four new sections:
+  - **MariaDB & phpMyAdmin Full Walkthrough** — clarifies that MariaDB is bundled in the stack (not a separate install), shows internal Docker networking diagram, phpMyAdmin access setup, common tasks, and root access.
+  - **How Services Are Connected** — ASCII diagram showing internal Docker network topology, explains container DNS resolution (`db`, `redis`), and why no manual connection configuration is needed.
+  - **Renaming the Stack in Dokploy** — explains what is safe to rename, what renaming does not affect, and safe rename procedure with volume warning.
+  - **Migrating WordPress from Local Disk** — full 8-step migration guide covering database export/import, file upload, `search-replace` for domain change, permission fix, and Redis re-activation.
+
+---
+
 ## [1.3.0] - 04/06/2026
 
 ### Fixed
