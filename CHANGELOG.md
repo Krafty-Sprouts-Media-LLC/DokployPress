@@ -8,6 +8,15 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.7.0] - 04/06/2026
+
+### Added
+- `wordpress/docker-entrypoint-custom.sh` — **Layer 1: wp-config.php auto-fix.** On every container start, detects if `DB_HOST` in wp-config.php differs from the `WORDPRESS_DB_HOST` environment variable (indicating a migration tool has overwritten it). If mismatch is found, uses `wp config set` to surgically correct only: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `WP_REDIS_HOST`, `WP_REDIS_PORT`, `WP_CACHE`. All other custom constants (`DISABLE_WP_CRON`, auth keys, table prefix, `WP_DEBUG`, etc.) are completely untouched.
+- `wordpress/ksm-migration-fixer.php` — **Layer 2: Must-use plugin.** Deployed to `wp-content/mu-plugins/` by the entrypoint on every container start. Fires only when `ksm-migration-pending.txt` marker file exists. Handles: siteurl/home URL correction, rewrite rule flush, Redis cache flush, Migrate Guru artefact removal (`migrategurupull.php`, `mg_storage`), Migrate Guru destination deactivation, Redis Object Cache re-activation. Writes audit log to `wp-content/ksm-migration-fixer.log`. Removes marker after running so cleanup fires only once.
+- `wordpress/Dockerfile` — Added `COPY ksm-migration-fixer.php /usr/local/lib/ksm/` step to bundle the mu-plugin inside the image (outside `wp-content`) so it cannot be overwritten by migration tools.
+
+---
+
 ## [1.6.0] - 04/06/2026
 
 ### Added
