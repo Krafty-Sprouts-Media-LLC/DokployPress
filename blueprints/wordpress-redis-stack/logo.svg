@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="45" fill="#21759b"/>
+  <text x="50" y="60" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">WP</text>
+  <circle cx="75" cy="25" r="12" fill="#dc382d"/>
+  <text x="75" y="30" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white" text-anchor="middle">R</text>
+</svg>

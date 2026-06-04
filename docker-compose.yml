@@ -1,0 +1,178 @@
+services:
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80"
+    environment:
+      - NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-256M}
+    volumes:
+      - wordpress_data:/var/www/html:ro
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${NGINX_CPU_LIMIT:-0.5}"
+          memory: "${NGINX_MEMORY_LIMIT:-256M}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  wordpress:
+    build:
+      context: ./wordpress
+      dockerfile: Dockerfile
+    environment:
+      - WORDPRESS_DB_HOST=${WORDPRESS_DB_HOST:-db}
+      - WORDPRESS_DB_USER=${WORDPRESS_DB_USER:-wordpress}
+      - WORDPRESS_DB_PASSWORD=${WORDPRESS_DB_PASSWORD}
+      - WORDPRESS_DB_NAME=${WORDPRESS_DB_NAME:-wordpress}
+      - WORDPRESS_CONFIG_EXTRA=
+          define('WP_REDIS_HOST', 'redis');
+          define('WP_REDIS_PORT', 6379);
+          define('WP_CACHE', true);
+      # PHP Settings
+      - PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-256M}
+      - PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-256M}
+      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-256M}
+      - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-300}
+      - PHP_MAX_INPUT_TIME=${PHP_MAX_INPUT_TIME:-300}
+      - PHP_MAX_INPUT_VARS=${PHP_MAX_INPUT_VARS:-3000}
+      # OPcache Settings
+      - PHP_OPCACHE_MEMORY=${PHP_OPCACHE_MEMORY:-128}
+      - PHP_OPCACHE_MAX_FILES=${PHP_OPCACHE_MAX_FILES:-4000}
+      - PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-0}
+    volumes:
+      - wordpress_data:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORDPRESS_CPU_LIMIT:-1.0}"
+          memory: "${WORDPRESS_MEMORY_LIMIT:-1G}"
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm-healthcheck || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.6
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-wordpress}
+      - MYSQL_USER=${MYSQL_USER:-wordpress}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${DB_CPU_LIMIT:-1.0}"
+          memory: "${DB_MEMORY_LIMIT:-1G}"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    command: redis-server --maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${REDIS_CPU_LIMIT:-0.5}"
+          memory: "${REDIS_MEMORY_LIMIT:-512M}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  plugin-installer:
+    build:
+      context: ./plugin-installer
+      dockerfile: Dockerfile
+    volumes:
+      - wordpress_data:/var/www/html
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${INSTALLER_CPU_LIMIT:-0.25}"
+          memory: "${INSTALLER_MEMORY_LIMIT:-128M}"
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    environment:
+      - PMA_HOST=db
+      - PMA_PORT=3306
+      - UPLOAD_LIMIT=${PMA_UPLOAD_LIMIT:-256M}
+    ports:
+      - "80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${PHPMYADMIN_CPU_LIMIT:-0.5}"
+          memory: "${PHPMYADMIN_MEMORY_LIMIT:-256M}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
+  internal:
+    driver: bridge
+
+volumes:
+  wordpress_data:
+    name: ${COMPOSE_PROJECT_NAME:-wordpress}_data
+  db_data:
+  redis_data:

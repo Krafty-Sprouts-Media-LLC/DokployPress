@@ -1,0 +1,16 @@
+[variables]
+main_domain = "${domain}"
+db_password = "${password:32}"
+db_root_password = "${password:32}"
+
+[config]
+env = [
+  "MYSQL_ROOT_PASSWORD=${db_root_password}",
+  "MYSQL_PASSWORD=${db_password}",
+  "WORDPRESS_DB_PASSWORD=${db_password}"
+]
+
+[[config.domains]]
+serviceName = "nginx"
+port = 80
+host = "${main_domain}"

@@ -1,0 +1,137 @@
+services:
+  nginx:
+    image: ghcr.io/itsmereal/dokploy-wp-nginx:latest
+    ports:
+      - "80"
+    environment:
+      - NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-256M}
+    volumes:
+      - wordpress_data:/var/www/html:ro
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  wordpress:
+    image: ghcr.io/itsmereal/dokploy-wp-wordpress:latest
+    environment:
+      - WORDPRESS_DB_HOST=db
+      - WORDPRESS_DB_USER=wordpress
+      - WORDPRESS_DB_PASSWORD=${WORDPRESS_DB_PASSWORD}
+      - WORDPRESS_DB_NAME=wordpress
+      - WORDPRESS_CONFIG_EXTRA=
+          define('WP_REDIS_HOST', 'redis');
+          define('WP_REDIS_PORT', 6379);
+          define('WP_CACHE', true);
+      - PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-256M}
+      - PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-256M}
+      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-256M}
+      - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-300}
+      - PHP_MAX_INPUT_TIME=${PHP_MAX_INPUT_TIME:-300}
+      - PHP_MAX_INPUT_VARS=${PHP_MAX_INPUT_VARS:-3000}
+      - PHP_OPCACHE_MEMORY=${PHP_OPCACHE_MEMORY:-128}
+      - PHP_OPCACHE_MAX_FILES=${PHP_OPCACHE_MAX_FILES:-4000}
+      - PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-0}
+    volumes:
+      - wordpress_data:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm-healthcheck || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.6
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=wordpress
+      - MYSQL_USER=wordpress
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  plugin-installer:
+    image: ghcr.io/itsmereal/dokploy-wp-plugin-installer:latest
+    volumes:
+      - wordpress_data:/var/www/html
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    networks:
+      - internal
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    environment:
+      - PMA_HOST=db
+      - PMA_PORT=3306
+      - UPLOAD_LIMIT=256M
+    ports:
+      - "80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
+  internal:
+    driver: bridge
+
+volumes:
+  wordpress_data:
+    name: ${COMPOSE_PROJECT_NAME:-wordpress}_data
+  db_data:
+  redis_data:

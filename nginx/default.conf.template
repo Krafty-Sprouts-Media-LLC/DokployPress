@@ -1,0 +1,138 @@
+# Detect HTTPS when behind a reverse proxy (Traefik) or Cloudflare Tunnel.
+# X-Forwarded-Proto covers standard reverse-proxy setups; CF-Visitor covers
+# Cloudflare Tunnel cases where the upstream proxy may strip X-Forwarded-Proto.
+map $http_x_forwarded_proto $tls_via_xfp {
+    default "";
+    https   "1";
+}
+
+map $http_cf_visitor $tls_via_cfv {
+    default                    "";
+    "~\"scheme\":\"https\""    "1";
+}
+
+map "$tls_via_xfp$tls_via_cfv" $fastcgi_https {
+    default "";
+    ~1      on;
+}
+
+upstream php-fpm {
+    server wordpress:9000;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    root /var/www/html;
+    index index.php index.html index.htm;
+
+    # Max upload size - configurable via environment variable
+    client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied expired no-cache no-store private auth;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml application/javascript application/json;
+    gzip_disable "MSIE [1-6]\.";
+
+    # Health check endpoint
+    location /healthz {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Deny access to sensitive files
+    location ~* /(?:uploads|files)/.*\.php$ {
+        deny all;
+    }
+
+    # WordPress permalinks
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # PHP-FPM configuration
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass php-fpm;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_param HTTPS $fastcgi_https if_not_empty;
+
+        # Extended timeouts for long-running scripts
+        fastcgi_read_timeout 300;
+        fastcgi_send_timeout 300;
+        fastcgi_connect_timeout 60;
+
+        # Buffer settings
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 4 256k;
+        fastcgi_busy_buffers_size 256k;
+    }
+
+    # Static asset caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires max;
+        log_not_found off;
+        access_log off;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Robots.txt and favicon - reduce log noise
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+
+    # WordPress XML-RPC (disable if not needed)
+    location = /xmlrpc.php {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Deny access to wp-config.php
+    location = /wp-config.php {
+        deny all;
+    }
+
+    # Deny access to wp-includes
+    location ~* wp-admin/includes {
+        deny all;
+    }
+
+    # Allow wp-admin and wp-includes for logged in users
+    location ~* wp-includes/.*\.php$ {
+        deny all;
+    }
+
+    # Deny access to any files with a .php extension in the uploads directory
+    location ~* /wp-content/uploads/.*\.php$ {
+        deny all;
+    }
+}
