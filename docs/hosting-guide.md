@@ -459,6 +459,58 @@ This stack stores `wp-content/uploads/` in the `wordpress_data` Docker volume on
 
 ---
 
+### Alternative Migration Method — Migrate Guru (Plugin-Based)
+
+If you prefer a plugin-driven migration rather than manual export/import, **Migrate Guru** is a solid free option that handles large sites well and avoids the file size limits that affect other migration plugins.
+
+**Plugin:** [Migrate Guru — WordPress.org](https://wordpress.org/plugins/migrate-guru/)
+
+**How it works with this stack:**
+
+1. Install and activate **Migrate Guru** on your **source site** (the existing live server).
+2. On Migrate Guru, select **Other Host** as the destination type.
+3. Provide your new server's SFTP credentials (see [SFTP Setup](./sftp-setup.md)) — Migrate Guru will transfer files directly to the WordPress container volume.
+4. For the database destination, provide the phpMyAdmin details or use the WP-CLI import approach after Migrate Guru transfers the files.
+5. Once the migration completes, run the URL update step:
+   ```bash
+   docker exec -it <wordpress-container-name> bash
+   wp search-replace 'https://old-domain.com' 'https://new-domain.com' --allow-root
+   wp cache flush --allow-root
+   ```
+
+> **Note:** Migrate Guru handles serialized data, multisite, and large databases gracefully. It is particularly useful when the source site is on shared hosting where SSH/mysqldump access is restricted.
+
+---
+
+## Future Enhancements
+
+### MilliCache — Full-Page Redis Caching
+
+**[MilliCache](https://github.com/MilliPress/MilliCache)** is a high-performance full-page caching plugin for WordPress that stores complete rendered HTML pages in Redis — meaning cached pages are served **before PHP even runs**, not just with reduced database queries.
+
+| | Redis Object Cache (current) | MilliCache (future) |
+|---|---|---|
+| **Caches** | DB queries & PHP objects | Entire rendered HTML page |
+| **PHP runs on every request?** | Yes | No — cache miss only |
+| **Performance gain** | High | Extreme |
+| **Uses existing Redis?** | ✅ | ✅ Same Redis container |
+
+**Why it's a future consideration, not current:**
+
+MilliCache likely ships with its own Nginx configuration snippet (to serve cached pages directly from Nginx without hitting PHP-FPM). This would need to be carefully **merged with our existing `nginx/default.conf.template`** to avoid conflicts — and would require a rebuild of the Nginx image.
+
+**What integration would involve:**
+
+1. Install MilliCache plugin in WordPress and configure it to use the existing Redis container (`host: redis`, `port: 6379`).
+2. Obtain MilliCache's required Nginx cache-serving rules and merge them into `nginx/default.conf.template`.
+3. Rebuild and push the Nginx Docker image via GitHub Actions.
+4. Redeploy the stack in Dokploy.
+5. Test cache hit/miss behaviour and purge rules.
+
+This is tracked as a future enhancement to this stack.
+
+---
+
 ## Related Documentation
 
 - [File Browser Setup](./filebrowser-setup.md) — Access WordPress files via a browser-based file manager

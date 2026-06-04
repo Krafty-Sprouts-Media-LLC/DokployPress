@@ -8,6 +8,14 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.5.0] - 04/06/2026
+
+### Added
+- `docs/hosting-guide.md` — **Alternative Migration Method** section covering Migrate Guru plugin-based migration, including SFTP integration steps and note on usefulness for shared hosting sources.
+- `docs/hosting-guide.md` — **Future Enhancements** section documenting MilliCache full-page Redis caching as a planned enhancement, including comparison table vs. current Redis Object Cache, and a step-by-step outline of what integration would require (Nginx config merge, image rebuild, redeploy).
+
+---
+
 ## [1.4.0] - 04/06/2026
 
 ### Added
