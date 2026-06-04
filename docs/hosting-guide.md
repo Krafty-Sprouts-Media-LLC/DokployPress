@@ -380,13 +380,13 @@ Deploy the stack as in Step 3. Complete the WordPress setup wizard with any temp
 
 ### Step 2 — Export the Old Database
 
-On your old server or Local by Flywheel:
+On your existing server (via SSH or the server's phpMyAdmin):
 
 ```bash
-# Using mysqldump
-mysqldump -u <user> -p <database_name> > site_backup.sql
+# Via SSH — using mysqldump
+mysqldump -u <db_user> -p <database_name> > site_backup.sql
 
-# Or via phpMyAdmin on old site → Export → Quick → Go
+# Or via phpMyAdmin on the old server → Export → Quick → Go
 ```
 
 ### Step 3 — Export WordPress Files
