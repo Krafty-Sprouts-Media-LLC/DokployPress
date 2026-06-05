@@ -1,15 +1,14 @@
 [
   {
-    "id": "wordpress-redis-stack",
-    "name": "WordPress + Redis Stack",
-    "version": "1.8.0",
+    "id": "ksm-wp-stack",
+    "name": "KSM WordPress Stack",
+    "version": "1.8.2",
     "description": "Production-ready WordPress with Nginx, Redis object cache, MilliCache full-page caching, phpMyAdmin, and WP-CLI",
     "logo": "logo.svg",
     "links": {
       "github": "https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack",
       "docs": "https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack#readme",
-      "upstream": "https://github.com/itsmereal/dokploy-wp",
-      "millicache": "https://github.com/MilliPress/MilliCache"
+      "upstream": "https://github.com/itsmereal/dokploy-wp"
     },
     "tags": ["wordpress", "cms", "redis", "nginx", "full-page-cache", "self-hosted"]
   }

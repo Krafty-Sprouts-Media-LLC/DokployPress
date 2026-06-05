@@ -9,12 +9,14 @@ FileBrowser can be added as a separate compose service to manage WordPress files
 
 ## Find Your WordPress Volume Name
 
-The WordPress volume is named `{project-name}_data`. To find it:
+The WordPress volume is named `{STACK_SLUG}_data` when `STACK_SLUG` is set, otherwise `{compose-project-name}_data`. To find it:
 
-1. In Dokploy, check your compose project name
+1. In Dokploy, check **Environment** for `STACK_SLUG`
 2. Or run on your server: `docker volume ls | grep _data`
 
-Example: If your project is `mysite-wordpressredisstack`, the volume is `mysite-wordpressredisstack_data`
+Examples:
+- `STACK_SLUG=plantnimals` → volume `plantnimals_data`
+- No `STACK_SLUG` → volume may be `mysite-wordpressredisstack-abc123_data`
 
 ## Deploy FileBrowser
 

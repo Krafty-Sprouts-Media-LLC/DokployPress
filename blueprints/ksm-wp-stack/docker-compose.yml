@@ -127,6 +127,19 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  sftp:
+    profiles:
+      - tools
+    image: atmoz/sftp:latest
+    command: "${SFTP_USER:-wpuser}:${SFTP_PASSWORD:-changeme_set_in_dokploy}:${SFTP_UID:-33}"
+    volumes:
+      - wordpress_data:/home/${SFTP_USER:-wpuser}/public_html
+    ports:
+      - "22"
+    networks:
+      - dokploy-network
+    restart: unless-stopped
+
 networks:
   dokploy-network:
     external: true
@@ -135,6 +148,8 @@ networks:
 
 volumes:
   wordpress_data:
-    name: ${COMPOSE_PROJECT_NAME:-wordpress}_data
+    name: ${STACK_SLUG:-${COMPOSE_PROJECT_NAME:-wordpress}}_data
   db_data:
+    name: ${STACK_SLUG:-${COMPOSE_PROJECT_NAME:-wordpress}}_db_data
   redis_data:
+    name: ${STACK_SLUG:-${COMPOSE_PROJECT_NAME:-wordpress}}_redis_data

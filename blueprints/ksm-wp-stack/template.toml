@@ -1,10 +1,13 @@
 [variables]
 main_domain = "${domain}"
+# Dokploy injects APP_NAME at deploy. Override STACK_SLUG in Environment for a shorter prefix.
+stack_slug = "${APP_NAME}"
 db_password = "${password:32}"
 db_root_password = "${password:32}"
 
 [config]
 env = [
+  "STACK_SLUG=${stack_slug}",
   "MYSQL_ROOT_PASSWORD=${db_root_password}",
   "MYSQL_PASSWORD=${db_password}",
   "WORDPRESS_DB_PASSWORD=${db_password}"

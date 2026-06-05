@@ -59,6 +59,7 @@ Rather than using Dokploy's built-in official WordPress template (which can surf
 | **Redis**          | Shared Redis for object cache (DB 0) and MilliCache full-page cache (DB 1) |
 | **phpMyAdmin**     | Database administration interface                        |
 | **Plugin Installer** | Automatically installs Redis Object Cache and MilliCache |
+| **SFTP** (optional) | Separate SFTP container — enable with `COMPOSE_PROFILES=tools` |
 
 The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack**
 
@@ -76,9 +77,10 @@ The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/WPDokpl
    ```
    https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/WPDokploystack/main
    ```
-6. Find and select **"WordPress + Redis Stack"**.
-7. Click **Create** and then **Confirm**.
-8. Click **Deploy** once the service is created.
+6. Find and select **"KSM WordPress Stack"**.
+7. Click **Create** and then **Confirm**. Dokploy does **not** ask for `STACK_SLUG` in a wizard — it auto-fills `STACK_SLUG` from Dokploy's internal `APP_NAME` (project name + template id + random suffix).
+8. **(Optional, before first Deploy)** Open **Environment** and set `STACK_SLUG=plantnimals` if you want short volume names (`plantnimals_data`, etc.) instead of the longer auto value.
+9. Click **Deploy** once ready.
 
 ### Option B: Manual Compose Deploy
 
@@ -87,10 +89,12 @@ The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/WPDokpl
 3. Set Compose Path: `./docker-compose.yml`
 4. Go to the **Environment** tab and add:
    ```env
+   STACK_SLUG=your-short-name
    MYSQL_ROOT_PASSWORD=YourSecureRootPass123!
    MYSQL_PASSWORD=YourSecureDbPass456!
    WORDPRESS_DB_PASSWORD=YourSecureDbPass456!
    ```
+   Set `STACK_SLUG` to a short identifier (e.g. `plantnimals`) **before the first deploy**.
 5. Click **Deploy**.
 
 ---
@@ -123,7 +127,7 @@ After adding domains, return to the **General** tab and click **Reload**.
 After you complete the WordPress setup wizard on a new site, the stack handles caching for you:
 
 1. **Plugin Installer** downloads Redis Object Cache and MilliCache into `wp-content/plugins`.
-2. The **WordPress entrypoint** activates both plugins and enables their drop-ins via WP-CLI on every container start (once WordPress is installed).
+2. The **cache-bootstrap mu-plugin** activates both plugins and enables their drop-ins on the first front-end page load after WordPress is installed.
 
 No manual activation in wp-admin is required. To verify:
 
@@ -144,6 +148,33 @@ Both layers use the same `redis` container. MilliCache connects via `MC_STORAGE_
 ---
 
 ## Environment Variable Reference
+
+### Stack Naming
+
+Dokploy does **not** ask for `STACK_SLUG` during template setup. For short volume names (e.g. `plantnimals_data` instead of a long auto-generated name):
+
+1. **Create** the service from the template — **do not Deploy yet**
+2. Open **Environment**
+3. Add or change: `STACK_SLUG=plantnimals`
+4. Click **Deploy** (first deploy only)
+
+| Variable      | Default                                      | Description |
+|---------------|----------------------------------------------|-------------|
+| `STACK_SLUG`  | Template: Dokploy `APP_NAME` (auto). Manual compose: `COMPOSE_PROJECT_NAME` if unset | Creates `{slug}_data`, `{slug}_db_data`, `{slug}_redis_data`. Use the steps above to override with a short prefix. |
+
+> **Important:** Changing `STACK_SLUG` after the first deploy does **not** rename existing volumes. Docker creates new empty volumes under the new name. Your site data remains in the old volumes until you migrate manually.
+
+On the VPS, WordPress files live at:
+
+```
+/var/lib/docker/volumes/<stack-slug>_data/_data/
+```
+
+Example with `STACK_SLUG=plantnimals`:
+
+```
+/var/lib/docker/volumes/plantnimals_data/_data/
+```
 
 ### Database Configuration
 
@@ -223,9 +254,30 @@ When this repo releases a new version (e.g., `1.4.0` → `1.6.0`), the changes t
 
 ### How Image Updates Work
 
-All images are tagged `:latest`. When GitHub Actions builds a new version, the `latest` tag in GHCR is overwritten. **Any Redeploy in Dokploy will pull the new image** for wordpress, nginx, and plugin-installer automatically.
+#### Custom stack images (nginx, WordPress, plugin-installer)
 
-No action is required from you beyond clicking **Redeploy** in Dokploy.
+Published to GHCR as `:latest`. When GitHub Actions builds a new release, **Redeploy** in Dokploy pulls the new image for these three services automatically.
+
+| Service | Image | How to update |
+|---------|-------|---------------|
+| **nginx** | `ghcr.io/krafty-sprouts-media-llc/dokploy-wp-nginx:latest` | **Redeploy** — pulls latest GHCR build |
+| **wordpress** (PHP-FPM) | `ghcr.io/krafty-sprouts-media-llc/dokploy-wp-wordpress:latest` | **Redeploy** — pulls latest (PHP version bumps ship in this image) |
+| **plugin-installer** | `ghcr.io/krafty-sprouts-media-llc/dokploy-wp-plugin-installer:latest` | **Redeploy** — one-shot sidecar re-runs if plugins missing |
+
+#### Third-party images (MariaDB, Redis, phpMyAdmin, optional SFTP)
+
+| Service | Image | How to update |
+|---------|-------|---------------|
+| **MariaDB** | `mariadb:10.6` (pinned) | Edit the `image:` tag in the **Compose** tab (e.g. `mariadb:10.11`), back up the database first, then **Redeploy**. Major MariaDB jumps need a planned migration — not just a tag change. |
+| **Redis** | `redis:alpine` | **Redeploy** pulls the current Alpine build. Pin a version (e.g. `redis:7-alpine`) in Compose if you want reproducible updates. |
+| **phpMyAdmin** | `phpmyadmin/phpmyadmin:latest` | **Redeploy** pulls latest. Pin a version in Compose for stricter control. |
+| **SFTP** (optional) | `atmoz/sftp:latest` | **Redeploy** when `COMPOSE_PROFILES=tools` is enabled. |
+
+> **Option A (template):** Dokploy stores a compose **snapshot** at create time. To change a pinned tag (e.g. MariaDB `10.6` → `10.11`), edit the **Compose** tab manually, then Redeploy. Image `:latest` services still update on Redeploy without compose edits.
+
+> **Option B (GitHub-linked):** **General → Pull** fetches the latest `docker-compose.yml` from the repo, then **Redeploy**.
+
+No action is required for custom GHCR images beyond clicking **Redeploy** after a new stack release.
 
 ---
 
@@ -416,29 +468,33 @@ FLUSH PRIVILEGES;
 
 ## Renaming the Stack in Dokploy — Will It Break Updates?
 
-**Short answer: Safe for display purposes. Watch out for full redeployments after rename.**
+**Short answer: UI display names are safe. Volume names are controlled by `STACK_SLUG` — set it once before the first deploy.**
 
-### What Renaming Changes
+### Display name vs volume names
 
-The **display name** shown in the Dokploy UI is cosmetic. You can rename it in the service's **General** tab at any time.
+- The **display name** in Dokploy (e.g. "KSM WordPress Stack") is cosmetic — rename anytime in **General**.
+- **Docker volume names** come from `STACK_SLUG` (preferred) or Dokploy's `COMPOSE_PROJECT_NAME` fallback. They do **not** follow UI renames.
 
-### What Renaming Does NOT Affect
+### Prevent long volume names
 
-- Running containers and their internal networking
-- Domain and SSL configuration
-- Volume data (WordPress files, database, Redis — stored in named Docker volumes)
-- Future redeployments triggered from the Dokploy UI
+Set `STACK_SLUG` to a short site identifier **before the first deploy**:
 
-### What to Watch Out For
+```env
+STACK_SLUG=plantnimals
+```
 
-> **Warning:** Dokploy may use the service name as the Docker project name (`COMPOSE_PROJECT_NAME`), which controls volume naming (e.g., `wordpress_data`). If a **full redeploy** is performed after renaming, Docker may treat it as a brand-new project and create empty volumes — leaving your data in the old volumes, detached.
+Volumes become `plantnimals_data`, `plantnimals_db_data`, `plantnimals_redis_data`.
 
-### Safe Rename Procedure
+### What changing `STACK_SLUG` later does
 
-1. In Dokploy → service **General** tab → edit the display name → Save.
-2. **Do not** click Redeploy immediately after renaming.
-3. The containers continue running under their existing Docker names.
-4. If you must redeploy after a rename, first run `docker volume ls` on the server to confirm volume names haven't changed, and back up your database first.
+> **Warning:** If you change `STACK_SLUG` after data exists, Docker creates **new empty volumes** with the new prefix. Your WordPress files, database, and Redis data stay in the **old** volumes (still on disk, but detached from the stack).
+
+### Safe procedure for existing long-named volumes
+
+1. Note current volume names: `docker volume ls | grep _data`
+2. Back up database and `wp-content` before any compose changes.
+3. Do **not** change `STACK_SLUG` on a live site unless you plan to migrate data into the new volumes.
+4. UI display renames alone are safe — no redeploy required.
 
 ---
 
@@ -550,8 +606,8 @@ If you prefer a plugin-driven migration rather than manual export/import, **Migr
 
 1. Install and activate **Migrate Guru** on your **source site** (the existing live server).
 2. On Migrate Guru, select **Other Host** as the destination type.
-3. Provide your new server's SFTP credentials (see [SFTP Setup](./sftp-setup.md)) — Migrate Guru will transfer files directly to the WordPress container volume.
-4. For the database destination, provide the phpMyAdmin details or use the WP-CLI import approach after Migrate Guru transfers the files.
+3. Provide destination credentials for however **you** access files on this server (SSH/SFTP volume path, optional SFTP container, etc.). See [SFTP Setup](./sftp-setup.md) for where WordPress files live on the VPS — e.g. `/var/lib/docker/volumes/<project-name>_data/_data/`. **You choose the path in the migration plugin** based on what works in your WinSCP session.
+4. For the database, use phpMyAdmin or WP-CLI import after Migrate Guru transfers files.
 5. Once the migration completes, run the URL update step:
    ```bash
    docker exec -it <wordpress-container-name> bash

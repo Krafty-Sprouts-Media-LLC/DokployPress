@@ -10,8 +10,8 @@
 #      this Docker stack's internal network configuration
 #   3. Ensure Redis Object Cache and MilliCache wp-config constants
 #   4. Deploy the KSM Migration Fixer mu-plugin on every start
-#   5. Activate cache plugins and enable drop-ins when WordPress is installed
-#   6. Hand off to the upstream WordPress entrypoint
+#   5. Hand off to the upstream WordPress entrypoint
+#      (Cache plugin activation runs via ksm-cache-bootstrap mu-plugin on first HTTP request.)
 #
 # @package KSM-WPDokploystack
 # @since   1.7.0
@@ -84,13 +84,18 @@ if [ -f "${WP_CONFIG}" ]; then
         wp config set DB_PASSWORD "${WORDPRESS_DB_PASSWORD}"             --path="${WP_PATH}" --allow-root
         wp config set DB_NAME     "${EXPECTED_DB_NAME}"                  --path="${WP_PATH}" --allow-root
 
-        # Ensure Redis constants are present (Migrate Guru strips WORDPRESS_CONFIG_EXTRA additions)
-        wp config set WP_REDIS_HOST "redis"  --path="${WP_PATH}" --allow-root
-        wp config set WP_REDIS_PORT "6379"   --path="${WP_PATH}" --allow-root
-        wp config set WP_CACHE "true"        --path="${WP_PATH}" --allow-root --raw
-        wp config set MC_STORAGE_HOST "redis" --path="${WP_PATH}" --allow-root
-        wp config set MC_STORAGE_PORT "6379"  --path="${WP_PATH}" --allow-root
-        wp config set MC_STORAGE_DB "1"       --path="${WP_PATH}" --allow-root --raw
+        # Restore cache constants only if a migration tool removed them.
+        # WORDPRESS_CONFIG_EXTRA already injects these on normal boots — avoid duplicate define().
+        for constant in WP_CACHE:true:raw WP_REDIS_HOST:redis WP_REDIS_PORT:6379 MC_STORAGE_HOST:redis MC_STORAGE_PORT:6379 MC_STORAGE_DB:1:raw; do
+            IFS=':' read -r name value flags <<< "${constant}"
+            if ! wp config has "${name}" --path="${WP_PATH}" --allow-root 2>/dev/null; then
+                if [ "${flags}" = "raw" ]; then
+                    wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root --raw
+                else
+                    wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root
+                fi
+            fi
+        done
 
         echo "[KSM] ✅ wp-config.php corrected successfully."
         echo ""
@@ -98,18 +103,6 @@ if [ -f "${WP_CONFIG}" ]; then
         echo "[KSM] wp-config.php DB_HOST looks correct (${CURRENT_DB_HOST:-not yet written})."
     fi
 
-    # Ensure MilliCache and Redis constants exist (fresh installs and migrations).
-    for constant in WP_CACHE:true:raw WP_REDIS_HOST:redis WP_REDIS_PORT:6379 MC_STORAGE_HOST:redis MC_STORAGE_PORT:6379 MC_STORAGE_DB:1:raw; do
-        IFS=':' read -r name value flags <<< "${constant}"
-        if ! wp config has "${name}" --path="${WP_PATH}" --allow-root 2>/dev/null; then
-            if [ "${flags}" = "raw" ]; then
-                wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root --raw
-            else
-                wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root
-            fi
-            echo "[KSM] Added missing wp-config constant: ${name}"
-        fi
-    done
 fi
 
 # ---------------------------------------------------------------------------
@@ -140,32 +133,6 @@ deploy_mu_plugin "/usr/local/lib/ksm/ksm-migration-fixer.php" "ksm-migration-fix
 deploy_mu_plugin "/usr/local/lib/ksm/ksm-cache-bootstrap.php" "ksm-cache-bootstrap.php"
 
 # ---------------------------------------------------------------------------
-# 4. Activate cache plugins and enable drop-ins (idempotent)
-#    Runs only after WordPress core is installed (post setup wizard).
-# ---------------------------------------------------------------------------
-if [ -f "${WP_CONFIG}" ] && wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
-    echo "[KSM] Bootstrapping cache plugins..."
-
-    if [ -f "${WP_PATH}/wp-content/plugins/redis-cache/redis-cache.php" ]; then
-        if ! wp plugin is-active redis-cache --path="${WP_PATH}" --allow-root 2>/dev/null; then
-            wp plugin activate redis-cache --path="${WP_PATH}" --allow-root
-            echo "[KSM] ✅ Redis Object Cache activated."
-        fi
-        wp redis enable --path="${WP_PATH}" --allow-root 2>/dev/null || true
-        echo "[KSM] ✅ Redis Object Cache drop-in verified."
-    fi
-
-    if [ -f "${WP_PATH}/wp-content/plugins/millicache/millicache.php" ]; then
-        if ! wp plugin is-active millicache --path="${WP_PATH}" --allow-root 2>/dev/null; then
-            wp plugin activate millicache --path="${WP_PATH}" --allow-root
-            echo "[KSM] ✅ MilliCache activated."
-        fi
-        wp millicache drop --path="${WP_PATH}" --allow-root 2>/dev/null || true
-        echo "[KSM] ✅ MilliCache drop-in verified."
-    fi
-fi
-
-# ---------------------------------------------------------------------------
-# 5. Hand off to the upstream WordPress Docker entrypoint
+# 4. Hand off to the upstream WordPress Docker entrypoint
 # ---------------------------------------------------------------------------
 exec docker-entrypoint.sh "$@"

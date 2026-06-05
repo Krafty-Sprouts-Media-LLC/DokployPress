@@ -32,6 +32,11 @@ function ksm_cache_bootstrap_run() {
 		return;
 	}
 
+	// WP-CLI loads WordPress in CLI context — skip to avoid side effects during install/commands.
+	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		return;
+	}
+
 	$ran = true;
 
 	if ( ! function_exists( 'is_plugin_active' ) ) {

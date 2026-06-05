@@ -1,6 +1,8 @@
-# Dokploy WordPress Stack
+# KSM WordPress Stack
 
 Production-ready WordPress deployment stack optimized for Dokploy with Redis object cache, MilliCache full-page caching, Nginx, and management tools.
+
+Forked and extended from [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp) by [Al-Mamun Talukder](https://itsmereal.com).
 
 ## Stack Components
 
@@ -12,6 +14,7 @@ Production-ready WordPress deployment stack optimized for Dokploy with Redis obj
 | **Redis** | Shared store for object cache (DB 0) and MilliCache full-page cache (DB 1) |
 | **phpMyAdmin** | Database administration interface |
 | **Plugin Installer** | Automatically installs Redis Object Cache and MilliCache plugins |
+| **SFTP** (optional) | Separate SFTP container — enable with `COMPOSE_PROFILES=tools` |
 
 ## Quick Start
 
@@ -27,9 +30,10 @@ Pick one of the two deploy methods below, then follow the shared **Post-Deploy S
    ```
    https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/WPDokploystack/main
    ```
-6. You will find **"WordPress + Redis Stack"**
-7. Click **Create** and **Confirm**
-8. Click **Deploy** when the service is created
+6. You will find **"KSM WordPress Stack"**
+7. Click **Create** and **Confirm** — Dokploy does **not** show a separate `STACK_SLUG` prompt
+8. **(Optional, before first Deploy)** Open **Environment** and set `STACK_SLUG=plantnimals` (or your short site name) if you want volumes like `plantnimals_data` instead of the auto-generated `APP_NAME` value
+9. Click **Deploy**
 
 ### Option B: Manual Compose Deploy
 
@@ -38,10 +42,12 @@ Pick one of the two deploy methods below, then follow the shared **Post-Deploy S
 3. Set Compose Path: `./docker-compose.yml`
 4. Go to **Environment** tab and add:
    ```
+   STACK_SLUG=your-short-name
    MYSQL_ROOT_PASSWORD=YourSecureRootPass123!
    MYSQL_PASSWORD=YourSecureDbPass456!
    WORDPRESS_DB_PASSWORD=YourSecureDbPass456!
    ```
+   Use a short `STACK_SLUG` (e.g. `plantnimals`) **before the first deploy** so volumes are named `plantnimals_data`, not a long Dokploy-generated name.
 5. Click **Deploy**
 
 ## Post-Deploy Setup
@@ -69,7 +75,7 @@ Then return to the **General** tab and click **Reload**.
 1. Visit `yourdomain.com` and finish the WordPress installation wizard (if this is a new site).
 2. Load any front-end page once while logged out — caching activates automatically.
 
-The stack installs both plugins via the plugin-installer sidecar, then activates and enables **Redis Object Cache** and **MilliCache** via the WordPress entrypoint and cache-bootstrap mu-plugin. No manual steps in wp-admin are required.
+The stack installs both plugins via the plugin-installer sidecar, then activates and enables **Redis Object Cache** and **MilliCache** automatically on the first front-end page load (cache-bootstrap mu-plugin). No manual steps in wp-admin are required.
 
 ### 3. Verify Caching (Optional)
 
@@ -82,7 +88,32 @@ wp millicache test
 
 For browser verification, add `define('MC_CACHE_DEBUG', true);` to wp-config (or via **Settings → MilliCache**), then check response headers: `X-MilliCache-Status: hit` on repeat visits (logged out).
 
+### 4. Accessing WordPress files (Optional)
+
+WordPress files live in a Docker volume on the VPS, e.g.:
+
+```
+/var/lib/docker/volumes/<stack-slug>_data/_data/
+```
+
+With `STACK_SLUG=plantnimals`, that path is `/var/lib/docker/volumes/plantnimals_data/_data/`.
+
+Use WinSCP/SSH to the VPS (port 22) and browse there. An optional **SFTP container** is also available — enable with `COMPOSE_PROFILES=tools` in Dokploy Environment. See [docs/sftp-setup.md](docs/sftp-setup.md).
+
 ## Environment Variables
+
+### Stack Naming
+
+Dokploy does **not** show a `STACK_SLUG` wizard step. The template auto-sets it from Dokploy's `APP_NAME` (longer name). For short volume names like `plantnimals_data`, set it yourself **before the first Deploy**:
+
+1. **Create** the service from the template — **do not Deploy yet**
+2. Open **Environment**
+3. Add or change: `STACK_SLUG=plantnimals`
+4. Click **Deploy** (first deploy only — changing `STACK_SLUG` later creates new empty volumes)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STACK_SLUG` | Template: Dokploy `APP_NAME` (auto). Manual compose: unset → `COMPOSE_PROJECT_NAME` | Short name for Docker volumes. Override using the steps above for a clean prefix (e.g. `plantnimals_data`). |
 
 ### Database Configuration
 
@@ -144,6 +175,17 @@ For browser verification, add `define('MC_CACHE_DEBUG', true);` to wp-config (or
 | `PHPMYADMIN_CPU_LIMIT` | 0.5 | phpMyAdmin CPU limit |
 | `PHPMYADMIN_MEMORY_LIMIT` | 256M | phpMyAdmin memory limit |
 
+### SFTP (Optional — requires `COMPOSE_PROFILES=tools`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPOSE_PROFILES` | — | Set to `tools` to enable the SFTP service |
+| `SFTP_USER` | wpuser | SFTP username |
+| `SFTP_PASSWORD` | — | **Required** when `tools` profile is enabled |
+| `SFTP_UID` | 33 | File owner UID (`www-data` in WordPress image) |
+| `SFTP_CPU_LIMIT` | 0.25 | SFTP CPU limit |
+| `SFTP_MEMORY_LIMIT` | 128M | SFTP memory limit |
+
 ## Changing Settings After Deployment
 
 All PHP, Nginx, Redis, and resource settings can be changed without rebuilding:
@@ -171,11 +213,13 @@ wp core update
 
 ## Volumes
 
-| Volume | Purpose |
-|--------|---------|
-| `wordpress_data` | WordPress files (/var/www/html) |
-| `db_data` | MariaDB data |
-| `redis_data` | Redis persistence |
+Named volumes use `STACK_SLUG` when set (e.g. `plantnimals_data`). Without `STACK_SLUG`, Docker falls back to Dokploy's compose project name.
+
+| Volume suffix | Purpose |
+|---------------|---------|
+| `_data` | WordPress files (`/var/www/html`) |
+| `_db_data` | MariaDB data |
+| `_redis_data` | Redis persistence |
 
 ## Security Recommendations
 
@@ -214,6 +258,28 @@ NGINX_CLIENT_MAX_BODY_SIZE=512M
 2. Run `wp millicache drop` inside the WordPress container
 3. Check `wp millicache status` — `advanced_cache` should show `symlink` or `file`
 4. Do not install other page-cache plugins (WP Super Cache, W3 Total Cache, etc.) — they conflict on `advanced-cache.php`
+
+## Smoke Testing
+
+Run a full integration test locally (requires Docker):
+
+```bash
+bash tests/smoke-test.sh
+```
+
+This starts the stack, installs WordPress, verifies Redis Object Cache and MilliCache (plugins, wp-config, WP-CLI, Redis connectivity), and checks HTTP responses. Use `--keep` to leave the stack running after the test:
+
+```bash
+bash tests/smoke-test.sh --keep
+```
+
+The same test runs automatically in GitHub Actions on every push to `main` (`.github/workflows/smoke-test.yml`).
+
+## Acknowledgments
+
+This stack is based on [dokploy-wp](https://github.com/itsmereal/dokploy-wp) by **Al-Mamun Talukder** ([@almamunreal](https://twitter.com/almamunreal)). See [itsmereal.com](https://itsmereal.com) for the original article and project.
+
+Maintained and extended by [Krafty Sprouts Media LLC](https://github.com/Krafty-Sprouts-Media-LLC).
 
 ## License
 

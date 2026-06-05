@@ -57,7 +57,7 @@ install_plugin_zip() {
 	fi
 
 	echo "Extracting ${name}..."
-	unzip -q "${expected_dir}.zip" -d "${PLUGINS_PATH}/"
+	unzip -q -o "${expected_dir}.zip" -d "${PLUGINS_PATH}/"
 	rm -f "${expected_dir}.zip"
 
 	if [ ! -d "${PLUGINS_PATH}/${expected_dir}" ]; then
@@ -68,7 +68,38 @@ install_plugin_zip() {
 	echo "${name} installed successfully."
 }
 
+install_millicache() {
+	local name="MilliCache"
+	local expected_dir="millicache"
+
+	if [ -f "${PLUGINS_PATH}/${expected_dir}/millicache.php" ]; then
+		echo "${name} is already installed. Skipping download."
+		return 0
+	fi
+
+	echo "Downloading ${name}..."
+	cd /tmp
+	curl -fsSL -o millicache.zip "${MILLICACHE_PLUGIN_URL}"
+
+	if [ ! -f "millicache.zip" ]; then
+		echo "ERROR: Failed to download ${name}."
+		exit 1
+	fi
+
+	# GitHub release zip extracts flat (millicache.php, src/, etc.) — not into a subfolder.
+	mkdir -p "${PLUGINS_PATH}/${expected_dir}"
+	unzip -q -o millicache.zip -d "${PLUGINS_PATH}/${expected_dir}/"
+	rm -f millicache.zip
+
+	if [ ! -f "${PLUGINS_PATH}/${expected_dir}/millicache.php" ]; then
+		echo "ERROR: ${name} installation verification failed."
+		exit 1
+	fi
+
+	echo "${name} installed successfully."
+}
+
 install_plugin_zip "Redis Object Cache" "${REDIS_PLUGIN_URL}" "redis-cache"
-install_plugin_zip "MilliCache" "${MILLICACHE_PLUGIN_URL}" "millicache"
+install_millicache
 
 echo "=== Cache plugins installed. Entrypoint will activate on next WordPress start. ==="

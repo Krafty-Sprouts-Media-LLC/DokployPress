@@ -8,6 +8,48 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.8.2] - 04/06/2026
+
+### Added
+- **`STACK_SLUG` environment variable** — Optional short name for Docker volumes. When set before first deploy, volumes are `{slug}_data`, `{slug}_db_data`, `{slug}_redis_data` instead of long Dokploy `COMPOSE_PROJECT_NAME` values. Template auto-fills from Dokploy `${APP_NAME}`; override in Environment before first Deploy for a short prefix (documented step-by-step in README and hosting guide).
+- `README.md` — **Acknowledgments** section crediting [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp) and Al-Mamun Talukder.
+
+### Fixed
+- `template.toml` — `${slug}` is not a Dokploy template variable; `STACK_SLUG` now uses Dokploy-injected `${APP_NAME}` so it resolves correctly at deploy time.
+
+### Changed
+- Template **id** `ksm-wp-stack`, **display name** **KSM WordPress Stack** (`meta.json`).
+- Blueprint folder renamed `blueprints/wordpress-redis-stack/` → `blueprints/ksm-wp-stack/`.
+- `docker-compose.yml` and `blueprints/ksm-wp-stack/docker-compose.yml` — Named volumes use `STACK_SLUG` with fallback to `COMPOSE_PROJECT_NAME`.
+- `blueprints/ksm-wp-stack/template.toml` — Passes `STACK_SLUG` from Dokploy-injected `${APP_NAME}` (override in Environment before first deploy for a shorter prefix).
+- `README.md`, `docs/hosting-guide.md`, `docs/sftp-setup.md`, `docs/filebrowser-setup.md` — Template name, volume path, and `STACK_SLUG` documentation updated.
+- `README.md` and `docs/hosting-guide.md` — Clarified `STACK_SLUG` is not a Dokploy wizard prompt; added explicit Create → Environment → Deploy steps for short volume names; per-service image update table added.
+
+### Notes
+- Existing deployments keep their current volume names. Changing `STACK_SLUG` after deploy creates new empty volumes; data remains in old volumes until manually migrated.
+
+---
+
+## [1.8.1] - 04/06/2026
+
+### Added
+- **SFTP service (optional `tools` profile)** — Built into `docker-compose.yml` and blueprint compose. Off by default; enable with `COMPOSE_PROFILES=tools` + `SFTP_PASSWORD` in Dokploy Environment, then redeploy. Mounts the same `wordpress_data` volume as WordPress.
+- `tests/smoke-test.sh` — Full integration smoke test: starts the stack, installs WordPress, verifies Redis Object Cache + MilliCache plugins, runs `wp redis status`, `wp millicache test`, and checks HTTP cache behaviour.
+- `tests/compose.override.yml` and `tests/.env.test` — Test overrides (published port `18080`) and non-production credentials for local/CI runs.
+- `.github/workflows/smoke-test.yml` — Runs smoke test on every push/PR to `main` and on manual dispatch.
+
+### Changed
+- `docs/sftp-setup.md` — Documents real VPS file location (`/var/lib/docker/volumes/<project>_data/_data/`) and optional SFTP container enable steps. No prescribed migration-plugin paths.
+- `README.md` and `docs/hosting-guide.md` — File access and SFTP enable docs corrected; Migrate Guru path instructions removed (users configure per their own connection).
+
+### Fixed
+- `plugin-installer/install-plugins.sh` — MilliCache GitHub zip extracts flat (not into a `millicache/` subfolder). Installer now extracts into `wp-content/plugins/millicache/` with `unzip -o` to avoid interactive prompts and partial installs.
+- `wordpress/docker-entrypoint-custom.sh` — Avoid duplicate `define()` warnings by not writing cache constants to `wp-config.php` when `WORDPRESS_CONFIG_EXTRA` already supplies them.
+- `wordpress/ksm-cache-bootstrap.php` — Skip bootstrap during WP-CLI runs to prevent activation side effects during `wp core install` and other commands.
+- `wordpress/docker-entrypoint-custom.sh` — Moved cache plugin activation out of container start (was causing OOM/slow boots). Activation now runs via `ksm-cache-bootstrap` mu-plugin on the first HTTP request after WordPress is installed.
+
+---
+
 ## [1.8.0] - 04/06/2026
 
 ### Added

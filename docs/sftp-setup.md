@@ -1,133 +1,107 @@
-# SFTP Setup (Optional)
+# File Access — SSH, Docker Volumes, and Optional SFTP
 
-Add SFTP access to manage WordPress files using any SFTP client (FileZilla, WinSCP, Cyberduck, etc.).
+WordPress files in this stack live in a **Docker named volume**, not in a `www` folder on the VPS. How you reach them depends on **how you connect**.
 
-## Prerequisites
+---
 
-- WordPress stack deployed and running
-- Know your WordPress volume name (see FileBrowser docs)
+## Method 1 — SSH / WinSCP to the VPS (what you already found)
 
-## Deploy SFTP Server
+Connect WinSCP (or SSH) to your **VPS on port 22** with your server login. WordPress files for each deploy are under:
 
-1. In Dokploy, create a new **Compose** service
-2. Use **Raw Compose** and paste:
-
-```yaml
-services:
-  sftp:
-    image: atmoz/sftp:latest
-    command: "${SFTP_USER:-wpuser}:${SFTP_PASSWORD}:1000"
-    environment:
-      - SFTP_USER=${SFTP_USER:-wpuser}
-      - SFTP_PASSWORD=${SFTP_PASSWORD}
-    volumes:
-      - wordpress_files:/home/${SFTP_USER:-wpuser}/wordpress
-    ports:
-      - "22"
-    networks:
-      - dokploy-network
-    restart: unless-stopped
-
-networks:
-  dokploy-network:
-    external: true
-
-volumes:
-  wordpress_files:
-    external: true
-    name: YOUR_PROJECT_NAME_data  # <-- Replace with actual volume name
+```
+/var/lib/docker/volumes/<stack-slug>_data/_data/
 ```
 
-3. Go to **Environment** tab and add:
-   ```
-   SFTP_USER=wpuser
-   SFTP_PASSWORD=YourSecurePassword123!
-   ```
+**With `STACK_SLUG` set before deploy** (recommended):
 
-4. Replace `YOUR_PROJECT_NAME_data` with your actual WordPress volume name
-5. Click **Deploy**
+```
+/var/lib/docker/volumes/plantnimals_data/_data/
+```
 
-## Connect via SFTP
+**Without `STACK_SLUG`** (Dokploy auto-generated project name — longer):
 
-Use your SFTP client with:
+```
+/var/lib/docker/volumes/plantnimals-wordpressredisstack-nkkjca_data/_data/
+```
+
+That `_data` folder **is** the site root — `wp-admin`, `wp-content`, `wp-includes`, etc.
+
+> Set `STACK_SLUG=plantnimals` (or your short site name) in Dokploy **Environment before the first deploy** to get predictable volume paths. See [README](../README.md#stack-naming).
+
+Related volumes for the same project:
+
+| Volume folder | Contents |
+|---------------|----------|
+| `..._data` | WordPress files |
+| `..._db_data` | MariaDB database files |
+| `..._redis_data` | Redis data |
+
+### Find your volume names
+
+On the VPS:
+
+```bash
+docker volume ls | grep _data
+```
+
+Or in Dokploy, check **Environment** for `STACK_SLUG` — the WordPress volume is `{STACK_SLUG}_data`. Without `STACK_SLUG`, use the compose project name from `docker volume ls`.
+
+> **Inside the WordPress container** the same files appear as `/var/www/html`. That path is only meaningful inside the container, not on the VPS host.
+
+---
+
+## Method 2 — Optional SFTP container (off by default)
+
+The stack can also run a dedicated **SFTP container** that mounts the same `wordpress_data` volume. This is **optional** and **disabled unless you enable it**.
+
+Use this if you want SFTP credentials separate from VPS SSH, or a migration plugin asks for SFTP host/port/user/pass.
+
+### Turn SFTP ON
+
+Dokploy → Compose service → **Environment**:
+
+```env
+COMPOSE_PROFILES=tools
+SFTP_USER=wpuser
+SFTP_PASSWORD=YourSecurePassword123!
+```
+
+Click **Redeploy**. Confirm an **`sftp`** container is running.
+
+### Connect WinSCP to the SFTP container
 
 | Setting | Value |
 |---------|-------|
-| Host | Your server IP or domain |
-| Port | Check Dokploy for the mapped port (or use 22 if direct) |
 | Protocol | SFTP |
-| Username | wpuser (or your SFTP_USER) |
-| Password | Your SFTP_PASSWORD |
+| Host | VPS IP |
+| Port | **Dokploy mapped port** for the `sftp` service (not assumed 22) |
+| User | `SFTP_USER` |
+| Password | `SFTP_PASSWORD` |
 
-Files are located at `/wordpress/` in your SFTP session.
+Browse until you see `wp-content`, `wp-admin`, etc. The exact folder names WinSCP displays depend on the SFTP image layout — use whatever path shows your site files.
 
-## Alternative: SSH Key Authentication
+### Turn SFTP OFF
 
-For key-based authentication instead of password:
+Remove `tools` from `COMPOSE_PROFILES` (or delete the variable) and redeploy. WordPress data is unchanged.
 
-```yaml
-services:
-  sftp:
-    image: atmoz/sftp:latest
-    command: "wpuser::1000"
-    volumes:
-      - wordpress_files:/home/wpuser/wordpress
-      - ./ssh_keys/id_rsa.pub:/home/wpuser/.ssh/keys/id_rsa.pub:ro
-    ports:
-      - "22"
-    networks:
-      - dokploy-network
-    restart: unless-stopped
+---
 
-networks:
-  dokploy-network:
-    external: true
+## Migration plugins (Migrate Guru, etc.)
 
-volumes:
-  wordpress_files:
-    external: true
-    name: YOUR_PROJECT_NAME_data
-```
+**We do not prescribe a remote path.** You enter whatever path your connection method requires:
 
-Mount your public key to `/home/wpuser/.ssh/keys/`.
+- **SSH / volume access** — use the Docker volume path you verified (e.g. `..._data/_data/`)
+- **SFTP container** — use the path where you see `wp-content` in WinSCP after connecting to the SFTP port
 
-## Multiple Users
+Configure host, port, username, password, and directory in the migration plugin according to **your** setup.
 
-```yaml
-command: "user1:password1:1000 user2:password2:1001"
-```
+---
 
-Each user gets their own home directory. Mount WordPress files to specific users as needed.
+## Optional SFTP variables
 
-## Port Mapping
-
-By default, Dokploy will assign a random port. To use a fixed port:
-
-1. In Dokploy, go to **Advanced** settings
-2. Add a port mapping: `2222:22` (external:internal)
-3. Connect using port 2222
-
-## Security Recommendations
-
-1. Use strong passwords or SSH keys
-2. Consider restricting SFTP access to specific IPs using firewall rules
-3. Regularly rotate credentials
-4. Monitor access logs
-
-## Troubleshooting
-
-### Connection refused
-
-- Check if the container is running
-- Verify the port mapping in Dokploy
-- Ensure firewall allows the SFTP port
-
-### Permission denied
-
-- Verify username and password
-- Check volume mount permissions
-- Ensure the volume name is correct
-
-### Can't write files
-
-The SFTP user needs write permissions. The atmoz/sftp image creates the user with UID 1000, which should match WordPress container's www-data in most cases.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPOSE_PROFILES` | — | Set to `tools` to start SFTP |
+| `SFTP_USER` | `wpuser` | SFTP username |
+| `SFTP_PASSWORD` | — | SFTP password (set in Dokploy) |
+| `SFTP_UID` | `33` | File owner UID (`www-data`) |

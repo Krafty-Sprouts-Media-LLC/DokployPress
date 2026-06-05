@@ -1,0 +1,32 @@
+name: Stack Smoke Test
+
+# =============================================================================
+# smoke-test.yml
+# Integration test: full Docker Compose stack + MilliCache verification.
+#
+# @package KSM-WPDokploystack
+# @since   1.8.0
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    name: Integration Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run smoke test
+        run: bash tests/smoke-test.sh
