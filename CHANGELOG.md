@@ -8,6 +8,18 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.11.0] - 05/06/2026
+
+### Added
+- **Automatic database search-replace on migration** — `wp search-replace` runs at **container start** (before php-fpm) when `ksm-migration-pending.txt` exists, so large DBs do not block HTTP requests or hit proxy timeouts. Fallback in `ksm-migration-fixer.php` v1.2.0 if `KSM_SITE_URL` was not set at boot.
+- `KSM_SITE_URL` — Pre-filled in Dokploy template from `${main_domain}` (e.g. `https://thexplorion.com`). Used as the search-replace target URL.
+- `KSM_MIGRATION_OLD_URL` — Optional override for the source URL when auto-detect from `siteurl` is wrong.
+
+### Changed
+- `blueprints/ksm-wp-stack/template.toml` — Inject `KSM_SITE_URL=https://${main_domain}` into stack environment.
+
+---
+
 ## [1.10.0] - 05/06/2026
 
 ### Added

@@ -8,6 +8,7 @@ db_root_password = "${password:32}"
 [config]
 env = [
   "STACK_SLUG=${stack_slug}",
+  "KSM_SITE_URL=https://${main_domain}",
   "MYSQL_ROOT_PASSWORD=${db_root_password}",
   "MYSQL_PASSWORD=${db_password}",
   "WORDPRESS_DB_PASSWORD=${db_password}"

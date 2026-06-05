@@ -8,7 +8,7 @@
  *              Redis cache reconnection, migration artefact removal, and
  *              domain correction. Fires only when a migration completion
  *              marker is detected — zero overhead on normal requests.
- * Version:     1.1.0
+ * Version:     1.2.0
  * Author:      Krafty Sprouts Media LLC
  * Author URI:  https://kraftysprouts.media
  *
@@ -51,6 +51,14 @@ class KSM_Migration_Fixer {
 	 * @var string
 	 */
 	const LOG_FILE = WP_CONTENT_DIR . '/ksm-migration-fixer.log';
+
+	/**
+	 * Flag file set after a successful database search-replace.
+	 *
+	 * @since 1.2.0
+	 * @var string
+	 */
+	const SEARCH_REPLACE_DONE_FLAG = WP_CONTENT_DIR . '/.ksm-search-replace-done';
 
 	/**
 	 * Stack-native cache plugins — always kept active on this stack.
@@ -134,6 +142,7 @@ class KSM_Migration_Fixer {
 		self::flush_object_cache( $log );
 		self::deactivate_conflicting_cache_plugins( $log );
 		self::reconcile_cache_drop_ins( $log );
+		self::run_database_search_replace( $log );
 		self::fix_site_urls( $log );
 		self::restore_plugins_from_database( $log );
 		self::restore_theme_from_database( $log );
@@ -255,6 +264,115 @@ class KSM_Migration_Fixer {
 	}
 
 	/**
+	 * Run wp search-replace across all tables when the migrated URL differs from this stack.
+	 * Skipped if the entrypoint already completed search-replace at container start.
+	 *
+	 * @since 1.2.0
+	 * @param array $log Log lines (by reference).
+	 * @return void
+	 */
+	private static function run_database_search_replace( array &$log ) {
+		if ( file_exists( self::SEARCH_REPLACE_DONE_FLAG ) ) {
+			$log[] = '  — Database search-replace already completed at container start.';
+			return;
+		}
+
+		$old_url = getenv( 'KSM_MIGRATION_OLD_URL' );
+		if ( false === $old_url || '' === $old_url ) {
+			$old_url = self::get_option_from_database( 'siteurl' );
+		}
+
+		$new_url = self::get_target_site_url();
+
+		if ( empty( $old_url ) || empty( $new_url ) || $old_url === $new_url ) {
+			$log[] = '  — Database search-replace skipped (URLs match or target URL unknown).';
+			return;
+		}
+
+		if ( 0 === strpos( $old_url, 'https://' ) ) {
+			$old_https = $old_url;
+			$old_http  = 'http://' . substr( $old_url, 8 );
+		} elseif ( 0 === strpos( $old_url, 'http://' ) ) {
+			$old_http  = $old_url;
+			$old_https = 'https://' . substr( $old_url, 7 );
+		} else {
+			$old_http  = 'http://' . $old_url;
+			$old_https = 'https://' . $old_url;
+		}
+
+		if ( 0 === strpos( $new_url, 'https://' ) ) {
+			$new_https = $new_url;
+		} elseif ( 0 === strpos( $new_url, 'http://' ) ) {
+			$new_https = 'https://' . substr( $new_url, 7 );
+		} else {
+			$new_https = 'https://' . $new_url;
+		}
+
+		$replacements = array(
+			$old_https => $new_https,
+			$old_http  => $new_https,
+		);
+
+		$old_host = wp_parse_url( $old_https, PHP_URL_HOST );
+		$new_host = wp_parse_url( $new_https, PHP_URL_HOST );
+
+		if ( $old_host && $new_host && $old_host !== $new_host ) {
+			$replacements[ $old_host ] = $new_host;
+		}
+
+		if ( ! function_exists( 'exec' ) ) {
+			$log[] = '  ⚠️  Database search-replace skipped (exec unavailable — entrypoint should have run this).';
+			return;
+		}
+
+		$wp_path = escapeshellarg( ABSPATH );
+
+		foreach ( $replacements as $from => $to ) {
+			if ( $from === $to ) {
+				continue;
+			}
+
+			$from_arg = escapeshellarg( $from );
+			$to_arg   = escapeshellarg( $to );
+			$command  = "wp search-replace {$from_arg} {$to_arg} --all-tables --skip-columns=guid --allow-root --path={$wp_path} 2>&1";
+
+			$output = array();
+			@exec( $command, $output );
+			$log[] = '  ✅ search-replace: ' . $from . ' → ' . $to;
+			if ( ! empty( $output ) ) {
+				$log[] = '     ' . implode( PHP_EOL . '     ', array_slice( $output, 0, 3 ) );
+			}
+		}
+
+		update_option( 'siteurl', $new_https );
+		update_option( 'home', $new_https );
+
+		touch( self::SEARCH_REPLACE_DONE_FLAG );
+		$log[] = '  ✅ Database search-replace complete (HTTP fallback).';
+	}
+
+	/**
+	 * Resolve the destination site URL from env or the current HTTP request.
+	 *
+	 * @since 1.2.0
+	 * @return string
+	 */
+	private static function get_target_site_url() {
+		$env_url = getenv( 'KSM_SITE_URL' );
+		if ( false !== $env_url && '' !== $env_url ) {
+			return untrailingslashit( $env_url );
+		}
+
+		$host = sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ?? '' ) );
+		if ( '' === $host ) {
+			return '';
+		}
+
+		$protocol = is_ssl() ? 'https' : 'http';
+		return $protocol . '://' . $host;
+	}
+
+	/**
 	 * Align siteurl/home with the domain Dokploy is serving.
 	 *
 	 * @since 1.1.0
@@ -262,8 +380,7 @@ class KSM_Migration_Fixer {
 	 * @return void
 	 */
 	private static function fix_site_urls( array &$log ) {
-		$protocol    = is_ssl() ? 'https' : 'http';
-		$current_url = $protocol . '://' . sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ?? '' ) );
+		$current_url = self::get_target_site_url();
 		$stored_url  = self::get_option_from_database( 'siteurl' );
 
 		if ( $stored_url && $current_url && $stored_url !== $current_url ) {

@@ -55,6 +55,8 @@ services:
       - PHP_OPCACHE_MEMORY=${PHP_OPCACHE_MEMORY:-128}
       - PHP_OPCACHE_MAX_FILES=${PHP_OPCACHE_MAX_FILES:-4000}
       - PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-0}
+      - KSM_SITE_URL=${KSM_SITE_URL:-}
+      - KSM_MIGRATION_OLD_URL=${KSM_MIGRATION_OLD_URL:-}
     volumes:
       - wordpress_data:/var/www/html
     depends_on:
