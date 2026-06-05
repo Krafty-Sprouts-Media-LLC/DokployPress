@@ -8,6 +8,25 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.8.0] - 04/06/2026
+
+### Added
+- **MilliCache full-page caching** — integrated alongside Redis Object Cache. Both plugins are installed by the plugin-installer sidecar, activated and configured automatically by the WordPress entrypoint via WP-CLI (`wp plugin activate`, `wp redis enable`, `wp millicache drop`).
+- `plugin-installer/install-plugins.sh` — Replaces `install-redis-plugin.sh`. Downloads Redis Object Cache (wordpress.org) and MilliCache v1.6.2 (GitHub release) into `wp-content/plugins`.
+- `wordpress/docker-entrypoint-custom.sh` — Ensures `MC_STORAGE_HOST`, `MC_STORAGE_PORT`, and `MC_STORAGE_DB` wp-config constants; bootstraps cache plugins on every start when WordPress is installed.
+- `wordpress/ksm-migration-fixer.php` — Post-migration step to re-activate MilliCache if present.
+- `wordpress/ksm-cache-bootstrap.php` — Must-use plugin that activates cache plugins on the first HTTP request after WordPress setup (no redeploy required).
+
+### Changed
+- `docker-compose.yml` and `blueprints/wordpress-redis-stack/docker-compose.yml` — Added MilliCache wp-config constants to `WORDPRESS_CONFIG_EXTRA`; bumped default `REDIS_MAXMEMORY` from `256mb` to `512mb` to accommodate full-page HTML storage.
+- `README.md` and `docs/hosting-guide.md` — Replaced manual Redis activation steps with automatic caching documentation; corrected MilliCache section (no Nginx rebuild required — uses `advanced-cache.php` drop-in, not Nginx FastCGI cache).
+- `meta.json` — Version `1.8.0`; updated description and tags.
+
+### Removed
+- `plugin-installer/install-redis-plugin.sh` — Superseded by `install-plugins.sh`.
+
+---
+
 ## [1.7.1] - 04/06/2026
 
 ### Added

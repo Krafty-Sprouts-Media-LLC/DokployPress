@@ -1,10 +1,17 @@
+# =============================================================================
+# KSM WPDokploystack — Cache plugin installer image
+#
+# One-shot sidecar that downloads Redis Object Cache and MilliCache plugins.
+#
+# @package KSM-WPDokploystack
+# @since   1.8.0
+# =============================================================================
+
 FROM alpine:3.19
 
-# Install required packages
 RUN apk add --no-cache bash curl unzip
 
-# Copy the installation script
-COPY install-redis-plugin.sh /install-redis-plugin.sh
-RUN chmod +x /install-redis-plugin.sh
+COPY install-plugins.sh /install-plugins.sh
+RUN chmod +x /install-plugins.sh
 
-ENTRYPOINT ["/install-redis-plugin.sh"]
+ENTRYPOINT ["/install-plugins.sh"]

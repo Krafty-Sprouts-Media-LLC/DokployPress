@@ -1,6 +1,6 @@
 # Dokploy WordPress Stack
 
-Production-ready WordPress deployment stack optimized for Dokploy with Redis caching, Nginx, and management tools.
+Production-ready WordPress deployment stack optimized for Dokploy with Redis object cache, MilliCache full-page caching, Nginx, and management tools.
 
 ## Stack Components
 
@@ -9,9 +9,9 @@ Production-ready WordPress deployment stack optimized for Dokploy with Redis cac
 | **WordPress** | PHP 8.3 FPM with Redis extension, OPcache, and WP-CLI |
 | **Nginx** | Optimized reverse proxy with caching and security headers |
 | **MariaDB 10.6** | Database server with health checks |
-| **Redis** | Object caching for improved performance |
+| **Redis** | Shared store for object cache (DB 0) and MilliCache full-page cache (DB 1) |
 | **phpMyAdmin** | Database administration interface |
-| **Plugin Installer** | Automatically installs Redis Object Cache plugin |
+| **Plugin Installer** | Automatically installs Redis Object Cache and MilliCache plugins |
 
 ## Quick Start
 
@@ -64,13 +64,23 @@ Then return to the **General** tab and click **Reload**.
 |----------|----------|
 | wordpress | (your `MYSQL_PASSWORD`) |
 
-### 2. Activate Redis Cache
+### 2. Complete WordPress Setup
 
-1. Log in to WordPress admin (`yourdomain.com/wp-admin`)
-2. Go to **Plugins > Installed Plugins**
-3. Activate **Redis Object Cache**
-4. Go to **Settings > Redis**
-5. Click **Enable Object Cache**
+1. Visit `yourdomain.com` and finish the WordPress installation wizard (if this is a new site).
+2. Load any front-end page once while logged out — caching activates automatically.
+
+The stack installs both plugins via the plugin-installer sidecar, then activates and enables **Redis Object Cache** and **MilliCache** via the WordPress entrypoint and cache-bootstrap mu-plugin. No manual steps in wp-admin are required.
+
+### 3. Verify Caching (Optional)
+
+```bash
+docker exec -it <wordpress-container-name> bash
+wp redis status
+wp millicache status
+wp millicache test
+```
+
+For browser verification, add `define('MC_CACHE_DEBUG', true);` to wp-config (or via **Settings → MilliCache**), then check response headers: `X-MilliCache-Status: hit` on repeat visits (logged out).
 
 ## Environment Variables
 
@@ -116,7 +126,7 @@ Then return to the **General** tab and click **Reload**.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_MAXMEMORY` | 256mb | Redis maximum memory |
+| `REDIS_MAXMEMORY` | 512mb | Redis maximum memory |
 | `REDIS_MAXMEMORY_POLICY` | allkeys-lru | Eviction policy |
 
 ### Resource Limits (No Rebuild Required)
@@ -195,8 +205,15 @@ NGINX_CLIENT_MAX_BODY_SIZE=512M
 ### Redis not connecting
 
 1. Verify Redis container is healthy
-2. Activate the Redis Object Cache plugin in WordPress
-3. Check Redis settings in WordPress admin
+2. Run `wp redis status` and `wp millicache test` inside the WordPress container
+3. Confirm wp-config contains `WP_REDIS_HOST=redis` and `MC_STORAGE_HOST=redis`
+
+### MilliCache not serving cached pages
+
+1. Ensure you are logged out (logged-in users bypass full-page cache by default)
+2. Run `wp millicache drop` inside the WordPress container
+3. Check `wp millicache status` — `advanced_cache` should show `symlink` or `file`
+4. Do not install other page-cache plugins (WP Super Cache, W3 Total Cache, etc.) — they conflict on `advanced-cache.php`
 
 ## License
 

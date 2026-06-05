@@ -32,6 +32,9 @@ services:
           define('WP_REDIS_HOST', 'redis');
           define('WP_REDIS_PORT', 6379);
           define('WP_CACHE', true);
+          define('MC_STORAGE_HOST', 'redis');
+          define('MC_STORAGE_PORT', 6379);
+          define('MC_STORAGE_DB', 1);
       - PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-256M}
       - PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-256M}
       - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-256M}
@@ -79,7 +82,7 @@ services:
 
   redis:
     image: redis:alpine
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     volumes:
       - redis_data:/data
     networks:

@@ -8,8 +8,10 @@
 #   2. Auto-correct wp-config.php if overwritten by a migration tool
 #      (e.g. Migrate Guru) with host-specific values that don't match
 #      this Docker stack's internal network configuration
-#   3. Deploy the KSM Migration Fixer mu-plugin on first run
-#   4. Hand off to the upstream WordPress entrypoint
+#   3. Ensure Redis Object Cache and MilliCache wp-config constants
+#   4. Deploy the KSM Migration Fixer mu-plugin on every start
+#   5. Activate cache plugins and enable drop-ins when WordPress is installed
+#   6. Hand off to the upstream WordPress entrypoint
 #
 # @package KSM-WPDokploystack
 # @since   1.7.0
@@ -86,12 +88,28 @@ if [ -f "${WP_CONFIG}" ]; then
         wp config set WP_REDIS_HOST "redis"  --path="${WP_PATH}" --allow-root
         wp config set WP_REDIS_PORT "6379"   --path="${WP_PATH}" --allow-root
         wp config set WP_CACHE "true"        --path="${WP_PATH}" --allow-root --raw
+        wp config set MC_STORAGE_HOST "redis" --path="${WP_PATH}" --allow-root
+        wp config set MC_STORAGE_PORT "6379"  --path="${WP_PATH}" --allow-root
+        wp config set MC_STORAGE_DB "1"       --path="${WP_PATH}" --allow-root --raw
 
         echo "[KSM] ✅ wp-config.php corrected successfully."
         echo ""
     else
         echo "[KSM] wp-config.php DB_HOST looks correct (${CURRENT_DB_HOST:-not yet written})."
     fi
+
+    # Ensure MilliCache and Redis constants exist (fresh installs and migrations).
+    for constant in WP_CACHE:true:raw WP_REDIS_HOST:redis WP_REDIS_PORT:6379 MC_STORAGE_HOST:redis MC_STORAGE_PORT:6379 MC_STORAGE_DB:1:raw; do
+        IFS=':' read -r name value flags <<< "${constant}"
+        if ! wp config has "${name}" --path="${WP_PATH}" --allow-root 2>/dev/null; then
+            if [ "${flags}" = "raw" ]; then
+                wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root --raw
+            else
+                wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root
+            fi
+            echo "[KSM] Added missing wp-config constant: ${name}"
+        fi
+    done
 fi
 
 # ---------------------------------------------------------------------------
@@ -100,20 +118,54 @@ fi
 #    it is always present even after a migration tool overwrites wp-content.
 # ---------------------------------------------------------------------------
 MU_PLUGINS_DIR="${WP_PATH}/wp-content/mu-plugins"
-MU_PLUGIN_SRC="/usr/local/lib/ksm/ksm-migration-fixer.php"
-MU_PLUGIN_DEST="${MU_PLUGINS_DIR}/ksm-migration-fixer.php"
+mkdir -p "${MU_PLUGINS_DIR}"
 
-if [ -f "${MU_PLUGIN_SRC}" ]; then
-    mkdir -p "${MU_PLUGINS_DIR}"
-    # Only copy if source is newer or destination missing
-    if [ ! -f "${MU_PLUGIN_DEST}" ] || [ "${MU_PLUGIN_SRC}" -nt "${MU_PLUGIN_DEST}" ]; then
-        cp "${MU_PLUGIN_SRC}" "${MU_PLUGIN_DEST}"
-        chown www-data:www-data "${MU_PLUGIN_DEST}"
-        echo "[KSM] ✅ Migration Fixer mu-plugin deployed to mu-plugins/."
+deploy_mu_plugin() {
+    local src="$1"
+    local dest_name="$2"
+
+    if [ ! -f "${src}" ]; then
+        return 0
+    fi
+
+    local dest="${MU_PLUGINS_DIR}/${dest_name}"
+    if [ ! -f "${dest}" ] || [ "${src}" -nt "${dest}" ]; then
+        cp "${src}" "${dest}"
+        chown www-data:www-data "${dest}"
+        echo "[KSM] ✅ ${dest_name} deployed to mu-plugins/."
+    fi
+}
+
+deploy_mu_plugin "/usr/local/lib/ksm/ksm-migration-fixer.php" "ksm-migration-fixer.php"
+deploy_mu_plugin "/usr/local/lib/ksm/ksm-cache-bootstrap.php" "ksm-cache-bootstrap.php"
+
+# ---------------------------------------------------------------------------
+# 4. Activate cache plugins and enable drop-ins (idempotent)
+#    Runs only after WordPress core is installed (post setup wizard).
+# ---------------------------------------------------------------------------
+if [ -f "${WP_CONFIG}" ] && wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
+    echo "[KSM] Bootstrapping cache plugins..."
+
+    if [ -f "${WP_PATH}/wp-content/plugins/redis-cache/redis-cache.php" ]; then
+        if ! wp plugin is-active redis-cache --path="${WP_PATH}" --allow-root 2>/dev/null; then
+            wp plugin activate redis-cache --path="${WP_PATH}" --allow-root
+            echo "[KSM] ✅ Redis Object Cache activated."
+        fi
+        wp redis enable --path="${WP_PATH}" --allow-root 2>/dev/null || true
+        echo "[KSM] ✅ Redis Object Cache drop-in verified."
+    fi
+
+    if [ -f "${WP_PATH}/wp-content/plugins/millicache/millicache.php" ]; then
+        if ! wp plugin is-active millicache --path="${WP_PATH}" --allow-root 2>/dev/null; then
+            wp plugin activate millicache --path="${WP_PATH}" --allow-root
+            echo "[KSM] ✅ MilliCache activated."
+        fi
+        wp millicache drop --path="${WP_PATH}" --allow-root 2>/dev/null || true
+        echo "[KSM] ✅ MilliCache drop-in verified."
     fi
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Hand off to the upstream WordPress Docker entrypoint
+# 5. Hand off to the upstream WordPress Docker entrypoint
 # ---------------------------------------------------------------------------
 exec docker-entrypoint.sh "$@"

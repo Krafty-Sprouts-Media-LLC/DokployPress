@@ -10,6 +10,7 @@ FROM wordpress:php8.3-fpm
 #   - php-fpm-healthcheck (for Dokploy health checks)
 #   - Custom entrypoint for env-driven PHP config and migration self-healing
 #   - KSM Migration Fixer mu-plugin (Layer 2 of migration auto-fix)
+#   - KSM Cache Bootstrap mu-plugin (activates cache plugins on first request)
 #
 # @package KSM-WPDokploystack
 # @since   1.0.0
@@ -56,6 +57,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint-custom.sh
 # The entrypoint copies it into wp-content/mu-plugins/ on every container start.
 RUN mkdir -p /usr/local/lib/ksm
 COPY ksm-migration-fixer.php /usr/local/lib/ksm/ksm-migration-fixer.php
+COPY ksm-cache-bootstrap.php /usr/local/lib/ksm/ksm-cache-bootstrap.php
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html

@@ -154,7 +154,21 @@ class KSM_Migration_Fixer {
         }
 
         // ------------------------------------------------------------------
-        // 7. Remove the migration marker file — cleanup must only run once.
+        // 7. Ensure MilliCache is activated after migration
+        //    Activation recreates the advanced-cache.php drop-in if missing.
+        // ------------------------------------------------------------------
+        $millicache_plugin = 'millicache/millicache.php';
+        if ( file_exists( WP_PLUGIN_DIR . '/millicache/millicache.php' ) ) {
+            if ( ! is_plugin_active( $millicache_plugin ) ) {
+                activate_plugin( $millicache_plugin );
+                $log[] = '  ✅ MilliCache plugin activated.';
+            } else {
+                $log[] = '  — MilliCache already active.';
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 8. Remove the migration marker file — cleanup must only run once.
         // ------------------------------------------------------------------
         $marker = ABSPATH . self::MARKER_FILE;
         if ( file_exists( $marker ) ) {
