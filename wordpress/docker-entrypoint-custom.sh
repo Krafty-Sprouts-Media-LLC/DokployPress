@@ -11,9 +11,7 @@
 #   3. Run upstream WordPress core extract / wp-config creation (fresh volumes)
 #   4. Auto-correct wp-config.php after core exists
 #   5. Deploy KSM mu-plugins after core exists (avoids fresh-install wipe by tar extract)
-#   6. Run database search-replace at container start when migration marker exists
-#      (avoids blocking HTTP requests or hitting proxy timeouts on large databases)
-#   7. Start php-fpm via upstream entrypoint
+#   6. Start php-fpm via upstream entrypoint
 #      (Cache plugin activation runs via ksm-cache-bootstrap mu-plugin on first HTTP request.)
 #
 # @package KSM-WPDokploystack
@@ -161,101 +159,15 @@ deploy_mu_plugin "/usr/local/lib/ksm/ksm-cache-bootstrap.php" "ksm-cache-bootstr
 #     Marker is consumed once by ksm-migration-fixer.php.
 # ---------------------------------------------------------------------------
 MARKER_FILE="${WP_PATH}/ksm-migration-pending.txt"
-SR_DONE_FLAG="${WP_PATH}/wp-content/.ksm-search-replace-done"
-FIXER_LOG="${WP_PATH}/wp-content/ksm-migration-fixer.log"
 
 if [ -f "${WP_PATH}/migrategurupull.php" ] || [ -d "${WP_PATH}/mg_storage" ]; then
     MIGRATION_DETECTED=1
-fi
-
-if [ "${MIGRATION_DETECTED:-0}" = "1" ]; then
-    rm -f "${SR_DONE_FLAG}"
 fi
 
 if [ "${MIGRATION_DETECTED:-0}" = "1" ] && [ ! -f "${MARKER_FILE}" ]; then
     touch "${MARKER_FILE}"
     chown www-data:www-data "${MARKER_FILE}"
     echo "[KSM] ✅ Migration detected — ksm-migration-pending.txt marker created for fixer."
-fi
-
-# ---------------------------------------------------------------------------
-# 4c. Database search-replace at container start (migration only)
-#     Runs via WP-CLI before php-fpm — does not block web requests.
-#     Requires KSM_SITE_URL (set from Dokploy domain in template.toml).
-# ---------------------------------------------------------------------------
-ksm_run_search_replace() {
-    local old_url="$1"
-    local new_url="$2"
-
-    if [ -z "${old_url}" ] || [ -z "${new_url}" ] || [ "${old_url}" = "${new_url}" ]; then
-        return 0
-    fi
-
-    if [ -f "${SR_DONE_FLAG}" ]; then
-        echo "[KSM] Search-replace already completed."
-        return 0
-    fi
-
-    mkdir -p "${WP_PATH}/wp-content"
-    echo "" >> "${FIXER_LOG}"
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Entrypoint search-replace: ${old_url} → ${new_url}" >> "${FIXER_LOG}"
-
-    local old_http="${old_url}"
-    local old_https="${old_url}"
-    local new_https="${new_url}"
-
-    if [[ "${old_url}" == https://* ]]; then
-        old_http="http://${old_url#https://}"
-    else
-        old_https="https://${old_url#http://}"
-    fi
-
-    if [[ "${new_url}" != https://* ]]; then
-        new_https="https://${new_url#http://}"
-    fi
-
-    local from to
-    for from in "${old_https}" "${old_http}"; do
-        if [ "${from}" = "${new_https}" ]; then
-            continue
-        fi
-        echo "[KSM]   wp search-replace '${from}' → '${new_https}'"
-        wp search-replace "${from}" "${new_https}" --all-tables --skip-columns=guid --path="${WP_PATH}" --allow-root >> "${FIXER_LOG}" 2>&1 || true
-    done
-
-    local old_host="${old_https#https://}"
-    old_host="${old_host#http://}"
-    old_host="${old_host%%/*}"
-    local new_host="${new_https#https://}"
-    new_host="${new_host%%/*}"
-
-    if [ -n "${old_host}" ] && [ -n "${new_host}" ] && [ "${old_host}" != "${new_host}" ]; then
-        echo "[KSM]   wp search-replace '${old_host}' → '${new_host}' (bare domain)"
-        wp search-replace "${old_host}" "${new_host}" --all-tables --skip-columns=guid --path="${WP_PATH}" --allow-root >> "${FIXER_LOG}" 2>&1 || true
-    fi
-
-    wp option update siteurl "${new_https}" --path="${WP_PATH}" --allow-root >> "${FIXER_LOG}" 2>&1 || true
-    wp option update home "${new_https}" --path="${WP_PATH}" --allow-root >> "${FIXER_LOG}" 2>&1 || true
-
-    touch "${SR_DONE_FLAG}"
-    chown www-data:www-data "${SR_DONE_FLAG}" 2>/dev/null || true
-    chown www-data:www-data "${FIXER_LOG}" 2>/dev/null || true
-    echo "[KSM] ✅ Database search-replace complete (container start — HTTP not blocked)."
-}
-
-if [ -f "${MARKER_FILE}" ] && [ -f "${WP_CONFIG}" ] && [ -f "${WP_PATH}/wp-includes/version.php" ]; then
-    OLD_SITE_URL="${KSM_MIGRATION_OLD_URL:-}"
-    if [ -z "${OLD_SITE_URL}" ]; then
-        OLD_SITE_URL=$(wp option get siteurl --path="${WP_PATH}" --allow-root 2>/dev/null || echo "")
-    fi
-
-    NEW_SITE_URL="${KSM_SITE_URL:-}"
-
-    if [ -n "${OLD_SITE_URL}" ] && [ -n "${NEW_SITE_URL}" ]; then
-        ksm_run_search_replace "${OLD_SITE_URL}" "${NEW_SITE_URL}"
-    else
-        echo "[KSM] Search-replace deferred — set KSM_SITE_URL in Dokploy env (fixer retries on first HTTP request)."
-    fi
 fi
 
 # ---------------------------------------------------------------------------

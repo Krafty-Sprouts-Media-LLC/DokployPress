@@ -8,6 +8,17 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.12.0] - 05/06/2026
+
+### Removed
+- **Automatic database search-replace** — Removed from entrypoint and migration fixer. URL changes in post content, widgets, and plugin settings are left to **WP-CLI** (`wp search-replace`) or a user-installed plugin (e.g. Better Search Replace). Avoids stale `KSM_SITE_URL` env conflicts when Dokploy domains change after deploy.
+- `KSM_SITE_URL` and `KSM_MIGRATION_OLD_URL` environment variables — no longer used by the stack.
+
+### Changed
+- `wordpress/ksm-migration-fixer.php` v1.3.0 — Still updates `siteurl`/`home` from the current request host; logs a reminder to run manual search-replace when needed.
+
+---
+
 ## [1.11.0] - 05/06/2026
 
 ### Added
