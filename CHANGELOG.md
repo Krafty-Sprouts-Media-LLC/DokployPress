@@ -8,6 +8,13 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.8.3] - 04/06/2026
+
+### Fixed
+- **CI smoke test** — `tests/.env.test` was excluded by `.gitignore` (`/.env.*/`) and never reached GitHub, causing `couldn't find env file` on Actions. Renamed to committed `tests/smoke-test.env` and updated `tests/smoke-test.sh`.
+
+---
+
 ## [1.8.2] - 04/06/2026
 
 ### Added

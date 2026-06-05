@@ -20,7 +20,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE="docker compose -f ${ROOT_DIR}/docker-compose.yml -f ${ROOT_DIR}/tests/compose.override.yml --env-file ${ROOT_DIR}/tests/.env.test"
+COMPOSE="docker compose -f ${ROOT_DIR}/docker-compose.yml -f ${ROOT_DIR}/tests/compose.override.yml --env-file ${ROOT_DIR}/tests/smoke-test.env"
 KEEP_STACK=false
 TEST_HTTP_PORT="${TEST_HTTP_PORT:-18080}"
 BASE_URL="http://127.0.0.1:${TEST_HTTP_PORT}"
