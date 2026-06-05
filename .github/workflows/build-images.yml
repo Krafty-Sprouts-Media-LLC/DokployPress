@@ -44,13 +44,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read stack version
+        id: version
+        run: |
+          VERSION=$(grep -o '"version": "[^"]*"' meta.json | head -1 | cut -d'"' -f4)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Stack version: ${VERSION}"
+
       - name: Build and push WordPress image
         uses: docker/build-push-action@v5
         with:
           context: ./wordpress
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ env.IMAGE_PREFIX }}-wordpress:latest
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-wordpress:latest
+            ${{ env.IMAGE_PREFIX }}-wordpress:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -60,7 +69,9 @@ jobs:
           context: ./nginx
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ env.IMAGE_PREFIX }}-nginx:latest
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-nginx:latest
+            ${{ env.IMAGE_PREFIX }}-nginx:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -69,7 +80,9 @@ jobs:
         with:
           context: ./plugin-installer
           push: true
+          no-cache: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ env.IMAGE_PREFIX }}-plugin-installer:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-plugin-installer:latest
+            ${{ env.IMAGE_PREFIX }}-plugin-installer:${{ steps.version.outputs.version }}
+          provenance: false

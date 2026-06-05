@@ -8,6 +8,17 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.9.0] - 05/06/2026
+
+### Fixed
+- **GHCR `:latest` served stale plugin-installer image** — VPS pulls showed `Entrypoint: /install-redis-plugin.sh` (pre-1.8.0) while CI built from source. Plugin-installer image now built with `no-cache: true` to bust bad GHA layer cache.
+- `blueprints/ksm-wp-stack/docker-compose.yml` — Pin images to version tag `1.9.0` (not bare `:latest`) and add `pull_policy: always` on nginx, wordpress, and plugin-installer.
+
+### Changed
+- `.github/workflows/build-images.yml` — Push both `:latest` and `:{version}` tags from `meta.json` for all three stack images.
+
+---
+
 ## [1.8.9] - 05/06/2026
 
 ### Fixed
