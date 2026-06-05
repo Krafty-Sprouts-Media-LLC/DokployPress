@@ -71,35 +71,51 @@ install_plugin_zip() {
 install_millicache() {
 	local name="MilliCache"
 	local expected_dir="millicache"
+	local attempt=1
+	local max_attempts=3
 
 	if [ -f "${PLUGINS_PATH}/${expected_dir}/millicache.php" ]; then
 		echo "${name} is already installed. Skipping download."
 		return 0
 	fi
 
-	echo "Downloading ${name}..."
-	cd /tmp
-	curl -fsSL -o millicache.zip "${MILLICACHE_PLUGIN_URL}"
+	while [ "${attempt}" -le "${max_attempts}" ]; do
+		echo "Downloading ${name} (attempt ${attempt}/${max_attempts})..."
+		cd /tmp
+		if curl -fsSL -o millicache.zip "${MILLICACHE_PLUGIN_URL}"; then
+			mkdir -p "${PLUGINS_PATH}/${expected_dir}"
+			unzip -q -o millicache.zip -d "${PLUGINS_PATH}/${expected_dir}/"
+			rm -f millicache.zip
 
-	if [ ! -f "millicache.zip" ]; then
-		echo "ERROR: Failed to download ${name}."
-		exit 1
+			if [ -f "${PLUGINS_PATH}/${expected_dir}/millicache.php" ]; then
+				echo "${name} installed successfully."
+				return 0
+			fi
+			echo "WARNING: ${name} extract verification failed on attempt ${attempt}."
+		else
+			echo "WARNING: Failed to download ${name} on attempt ${attempt}."
+		fi
+		attempt=$((attempt + 1))
+		sleep 5
+	done
+
+	echo "ERROR: ${name} installation failed after ${max_attempts} attempts."
+	return 1
+}
+
+fix_plugin_permissions() {
+	if id www-data >/dev/null 2>&1; then
+		chown -R www-data:www-data "${PLUGINS_PATH}" 2>/dev/null || true
 	fi
-
-	# GitHub release zip extracts flat (millicache.php, src/, etc.) — not into a subfolder.
-	mkdir -p "${PLUGINS_PATH}/${expected_dir}"
-	unzip -q -o millicache.zip -d "${PLUGINS_PATH}/${expected_dir}/"
-	rm -f millicache.zip
-
-	if [ ! -f "${PLUGINS_PATH}/${expected_dir}/millicache.php" ]; then
-		echo "ERROR: ${name} installation verification failed."
-		exit 1
-	fi
-
-	echo "${name} installed successfully."
 }
 
 install_plugin_zip "Redis Object Cache" "${REDIS_PLUGIN_URL}" "redis-cache"
-install_millicache
 
-echo "=== Cache plugins installed. Entrypoint will activate on next WordPress start. ==="
+if ! install_millicache; then
+	echo "ERROR: MilliCache could not be installed. Redis Object Cache was installed."
+	exit 1
+fi
+
+fix_plugin_permissions
+
+echo "=== Cache plugins installed. Mu-plugin bootstrap activates them on first front-end request. ==="

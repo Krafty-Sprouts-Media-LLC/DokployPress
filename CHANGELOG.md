@@ -8,6 +8,20 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.8.7] - 04/06/2026
+
+### Fixed
+- **Fresh install mu-plugins missing** — `docker-entrypoint-custom.sh` deployed mu-plugins before the official WordPress tar extract on empty volumes, so they were wiped on first boot. Entrypoint now runs core setup first, then deploys mu-plugins.
+- `plugin-installer/install-plugins.sh` — MilliCache download retries (3 attempts); `chown` plugins after install.
+- `blueprints/ksm-wp-stack/docker-compose.yml` — `plugin-installer` `restart: on-failure` so a slow first boot can retry.
+
+### Changed
+- `wordpress/Dockerfile` — Bundle mu-plugins in `/usr/src/wordpress/wp-content/mu-plugins/` for fresh-volume extract.
+- `tests/smoke-test.sh` — Assert KSM mu-plugins exist after stack start.
+- `docs/hosting-guide.md` — Troubleshooting for missing MilliCache / inactive plugins on fresh installs.
+
+---
+
 ## [1.8.6] - 04/06/2026
 
 ### Changed

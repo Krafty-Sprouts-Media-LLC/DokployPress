@@ -8,9 +8,10 @@
 #   2. Auto-correct wp-config.php if overwritten by a migration tool
 #      (e.g. Migrate Guru) with host-specific values that don't match
 #      this Docker stack's internal network configuration
-#   3. Ensure Redis Object Cache and MilliCache wp-config constants
-#   4. Deploy the KSM Migration Fixer mu-plugin on every start
-#   5. Hand off to the upstream WordPress entrypoint
+#   3. Run upstream WordPress core extract / wp-config creation (fresh volumes)
+#   4. Auto-correct wp-config.php after core exists
+#   5. Deploy KSM mu-plugins after core exists (avoids fresh-install wipe by tar extract)
+#   6. Start php-fpm via upstream entrypoint
 #      (Cache plugin activation runs via ksm-cache-bootstrap mu-plugin on first HTTP request.)
 #
 # @package KSM-WPDokploystack
@@ -55,19 +56,28 @@ echo "  memory_limit        : ${PHP_MEMORY_LIMIT:-256M}"
 echo "  max_execution_time  : ${PHP_MAX_EXECUTION_TIME:-300}s"
 echo "  OPcache memory      : ${PHP_OPCACHE_MEMORY:-128}MB"
 
-# ---------------------------------------------------------------------------
-# 2. wp-config.php migration auto-fix (Layer 1)
-#    Runs every container start. Safe to run repeatedly — only acts when
-#    values are actually wrong. Fixes DB connection and Redis config so
-#    WordPress can boot after a migration tool (e.g. Migrate Guru) has
-#    overwritten wp-config.php with the source host's settings.
-# ---------------------------------------------------------------------------
 WP_PATH="/var/www/html"
 WP_CONFIG="${WP_PATH}/wp-config.php"
 EXPECTED_DB_HOST="${WORDPRESS_DB_HOST:-db}"
 EXPECTED_DB_USER="${WORDPRESS_DB_USER:-wordpress}"
 EXPECTED_DB_NAME="${WORDPRESS_DB_NAME:-wordpress}"
 
+# ---------------------------------------------------------------------------
+# 2. WordPress core extract + wp-config creation (upstream entrypoint)
+#    Run setup without starting php-fpm. On fresh volumes the official
+#    entrypoint tar-extracts WordPress into /var/www/html — which would
+#    overwrite mu-plugins if we deployed them before this step.
+# ---------------------------------------------------------------------------
+echo "[KSM] Running WordPress core setup (if needed)..."
+docker-entrypoint.sh /bin/true
+
+# ---------------------------------------------------------------------------
+# 3. wp-config.php migration auto-fix (Layer 1)
+#    Runs every container start. Safe to run repeatedly — only acts when
+#    values are actually wrong. Fixes DB connection and Redis config so
+#    WordPress can boot after a migration tool (e.g. Migrate Guru) has
+#    overwritten wp-config.php with the source host's settings.
+# ---------------------------------------------------------------------------
 if [ -f "${WP_CONFIG}" ]; then
     # Read the DB_HOST currently written in wp-config.php
     CURRENT_DB_HOST=$(grep -oP "(?<=DB_HOST', ')[^']+" "${WP_CONFIG}" 2>/dev/null || echo "")
@@ -106,9 +116,7 @@ if [ -f "${WP_CONFIG}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Deploy KSM Migration Fixer mu-plugin (Layer 2)
-#    Copies the mu-plugin into wp-content/mu-plugins/ on every start so
-#    it is always present even after a migration tool overwrites wp-content.
+# 4. Deploy KSM mu-plugins (Layer 2) — after WordPress core exists in volume
 # ---------------------------------------------------------------------------
 MU_PLUGINS_DIR="${WP_PATH}/wp-content/mu-plugins"
 mkdir -p "${MU_PLUGINS_DIR}"
@@ -133,6 +141,6 @@ deploy_mu_plugin "/usr/local/lib/ksm/ksm-migration-fixer.php" "ksm-migration-fix
 deploy_mu_plugin "/usr/local/lib/ksm/ksm-cache-bootstrap.php" "ksm-cache-bootstrap.php"
 
 # ---------------------------------------------------------------------------
-# 4. Hand off to the upstream WordPress Docker entrypoint
+# 5. Start php-fpm via upstream WordPress entrypoint
 # ---------------------------------------------------------------------------
 exec docker-entrypoint.sh "$@"

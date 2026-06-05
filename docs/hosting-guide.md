@@ -145,6 +145,32 @@ wp millicache test
 
 Both layers use the same `redis` container. MilliCache connects via `MC_STORAGE_HOST=redis` (Docker internal DNS). **No Nginx changes are required** — MilliCache uses WordPress's `advanced-cache.php` drop-in, not Nginx FastCGI cache.
 
+### 4c. Fresh install — plugins and mu-plugins not showing?
+
+On a **new** site you should see:
+
+| Location | What |
+|----------|------|
+| **Plugins** | Redis Object Cache + MilliCache (inactive until bootstrap runs) |
+| **Plugins → Must-Use** (bottom of screen) | KSM Cache Bootstrap + KSM Migration Fixer |
+
+**Plugins stay inactive until the first front-end page load** (not wp-admin only). Visit your site homepage while logged out, then refresh **Plugins**.
+
+If MilliCache is missing or mu-plugins are absent:
+
+1. In Dokploy → **Logs** → open **plugin-installer** — confirm both plugins downloaded without errors.
+2. **Redeploy** the stack (pulls fixed images from v1.8.7+). A WordPress container restart deploys mu-plugins into the volume.
+3. Or fix manually via SSH:
+
+```bash
+docker exec -it <wordpress-container-name> bash
+ls wp-content/plugins/millicache/millicache.php
+ls wp-content/mu-plugins/
+wp plugin activate redis-cache millicache --allow-root
+wp redis enable --allow-root
+wp millicache drop --allow-root
+```
+
 ---
 
 ## Environment Variable Reference

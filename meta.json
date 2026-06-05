@@ -2,7 +2,7 @@
   {
     "id": "ksm-wp-stack",
     "name": "KSM WordPress Stack",
-    "version": "1.8.6",
+    "version": "1.8.7",
     "description": "Production-ready WordPress with Nginx, Redis object cache, MilliCache full-page caching, phpMyAdmin, and WP-CLI",
     "logo": "logo.svg",
     "links": {

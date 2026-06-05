@@ -52,12 +52,12 @@ RUN echo "pm.status_path = /status" >> /usr/local/etc/php-fpm.d/zz-docker.conf
 COPY docker-entrypoint-custom.sh /usr/local/bin/docker-entrypoint-custom.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint-custom.sh
 
-# Bundle the KSM Migration Fixer mu-plugin (Layer 2).
-# Stored outside wp-content so it survives migration tool overwrites.
-# The entrypoint copies it into wp-content/mu-plugins/ on every container start.
-RUN mkdir -p /usr/local/lib/ksm
+# Bundle KSM mu-plugins for entrypoint deploy and fresh-volume tar extract.
+RUN mkdir -p /usr/local/lib/ksm /usr/src/wordpress/wp-content/mu-plugins
 COPY ksm-migration-fixer.php /usr/local/lib/ksm/ksm-migration-fixer.php
 COPY ksm-cache-bootstrap.php /usr/local/lib/ksm/ksm-cache-bootstrap.php
+COPY ksm-migration-fixer.php /usr/src/wordpress/wp-content/mu-plugins/ksm-migration-fixer.php
+COPY ksm-cache-bootstrap.php /usr/src/wordpress/wp-content/mu-plugins/ksm-cache-bootstrap.php
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html
