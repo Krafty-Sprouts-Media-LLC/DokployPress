@@ -8,6 +8,13 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.8.9] - 05/06/2026
+
+### Fixed
+- `tests/smoke-test.sh` — Plugin installer wait loop now polls log output for the final success banner (`Cache plugins installed`) instead of checking container state, which was unreliable when container exit happened between iterations. Timeout extended to 6 min.
+
+---
+
 ## [1.8.8] - 05/06/2026
 
 ### Fixed

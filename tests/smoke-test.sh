@@ -64,21 +64,14 @@ for i in $(seq 1 60); do
 done
 
 info "Waiting for plugin-installer to finish..."
-for i in $(seq 1 60); do
-	# Check container state — works across Docker Compose v2 versions
-	STATE="$(${COMPOSE} ps plugin-installer 2>/dev/null || echo "")"
-	if echo "${STATE}" | grep -qiE "Exited|exited"; then
-		# Container exited — verify success via log content
-		LOGS="$(${COMPOSE} logs plugin-installer 2>/dev/null || echo "")"
-		if echo "${LOGS}" | grep -q "installed successfully"; then
-			pass "Plugin installer completed successfully"
-			break
-		fi
-		echo "${LOGS}"
-		fail "Plugin installer exited but plugins not confirmed installed"
+for i in $(seq 1 72); do
+	LOGS="$(${COMPOSE} logs plugin-installer 2>/dev/null || echo "")"
+	if echo "${LOGS}" | grep -q "Cache plugins installed"; then
+		pass "Plugin installer completed successfully"
+		break
 	fi
-	if [ "$i" -eq 60 ]; then
-		${COMPOSE} logs plugin-installer
+	if [ "$i" -eq 72 ]; then
+		echo "${LOGS}"
 		fail "Plugin installer did not complete in time"
 	fi
 	sleep 5
