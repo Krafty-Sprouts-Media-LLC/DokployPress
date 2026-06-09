@@ -8,6 +8,14 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.13.1] - 09/06/2026
+
+### Fixed
+- **`wp-cron` container: `sh: syntax error: unexpected "&&"`** — The `>` (YAML folded block scalar) collapses newlines into spaces, which broke `&&`/`||` chaining inside the nested `sh -c "..."` string. Replaced with YAML list form (`command: [/bin/sh, -c, |...]`) and `if/then/fi` instead of `&&`/`||`. No escaping issues, no folding, works correctly in Alpine `sh`.
+- Applies to both `docker-compose.yml` and `blueprints/ksm-wp-stack/docker-compose.yml`.
+
+---
+
 ## [1.13.0] - 09/06/2026
 
 ### Added

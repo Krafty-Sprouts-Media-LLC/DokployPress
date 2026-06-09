@@ -178,17 +178,19 @@ services:
   # ---------------------------------------------------------------------------
   wp-cron:
     image: alpine:latest
-    command: >
-      sh -c "
-        echo 'WP-Cron sidecar started. Interval: 300s';
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo 'WP-Cron sidecar started. Interval: 300s'
         while true; do
-          wget -q -O - 'http://nginx/wp-cron.php?doing_wp_cron' > /dev/null 2>&1
-            && echo \"[$(date '+%Y-%m-%d %H:%M:%S')] wp-cron triggered\"
-            || echo \"[$(date '+%Y-%m-%d %H:%M:%S')] wp-cron request failed (nginx may still be starting)\"
-          ;
-          sleep ${WP_CRON_INTERVAL:-300};
+          if wget -q -O /dev/null 'http://nginx/wp-cron.php?doing_wp_cron' 2>&1; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] wp-cron triggered"
+          else
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] wp-cron request failed (nginx may still be starting)"
+          fi
+          sleep "${WP_CRON_INTERVAL:-300}"
         done
-      "
     depends_on:
       nginx:
         condition: service_healthy
