@@ -198,9 +198,12 @@ Result on the VPS:
 | `COMPOSE_PROFILES` | — | Set to `tools` to enable the SFTP service |
 | `SFTP_USER` | wpuser | SFTP username |
 | `SFTP_PASSWORD` | — | **Required** when `tools` profile is enabled |
+| `SFTP_PORT` | 2222 | Public VPS port forwarded to the SFTP container |
 | `SFTP_UID` | 33 | File owner UID (`www-data` in WordPress image) |
 | `SFTP_CPU_LIMIT` | 0.25 | SFTP CPU limit |
 | `SFTP_MEMORY_LIMIT` | 128M | SFTP memory limit |
+
+When using the optional SFTP container, the WordPress root is `/public_html` in the SFTP client. The VPS Docker volume path under `/var/lib/docker/volumes/.../_data/` is only for direct VPS SSH access.
 
 ## Changing Settings After Deployment
 

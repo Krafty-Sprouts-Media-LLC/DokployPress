@@ -8,6 +8,19 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.13.5] - 19/06/2026
+
+### Fixed
+- **Optional SFTP container port ambiguity** — Changed SFTP publishing from an anonymous host port to `${SFTP_PORT:-2222}:22`, so Dokploy deployments can use a predictable public SFTP port instead of a random Docker-assigned port.
+- **SFTP path documentation** — Clarified that VPS SSH uses Docker volume paths like `/var/lib/docker/volumes/<stack-slug>_data/_data/`, while the optional SFTP container exposes the WordPress root as `/public_html` because the SFTP user is chrooted.
+
+### Changed
+- `docs/sftp-setup.md` and `README.md` — Added generic examples for SFTP paths and warned not to use VPS Docker volume paths through the SFTP container.
+- `.gitignore` — Ignore local `config.txt` inspect dumps that may contain live deployment details.
+- `blueprints/ksm-wp-stack/docker-compose.yml` — Image tags bumped to `1.13.5`.
+
+---
+
 ## [1.13.4] - 09/06/2026
 
 ### Fixed

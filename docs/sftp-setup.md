@@ -66,9 +66,12 @@ Dokploy → Compose service → **Environment**:
 COMPOSE_PROFILES=tools
 SFTP_USER=wpuser
 SFTP_PASSWORD=YourSecurePassword123!
+SFTP_PORT=2222
 ```
 
 Click **Redeploy**. Confirm an **`sftp`** container is running.
+
+> If `SFTP_PORT` is not set on an older deploy, Docker/Dokploy may publish the SFTP container on a random host port. Check the service's published port in Dokploy or with `docker inspect`, then use that host port in your SFTP client.
 
 ### Connect WinSCP to the SFTP container
 
@@ -76,11 +79,33 @@ Click **Redeploy**. Confirm an **`sftp`** container is running.
 |---------|-------|
 | Protocol | SFTP |
 | Host | VPS IP |
-| Port | **Dokploy mapped port** for the `sftp` service (not assumed 22) |
+| Port | `SFTP_PORT` (default `2222`; not the VPS SSH port `22`) |
 | User | `SFTP_USER` |
 | Password | `SFTP_PASSWORD` |
 
 Browse until you see `wp-content`, `wp-admin`, etc. The exact folder names WinSCP displays depend on the SFTP image layout — use whatever path shows your site files.
+
+### SFTP paths are not VPS paths
+
+The SFTP container mounts the WordPress volume at:
+
+```text
+/home/<sftp-user>/public_html
+```
+
+Because the SFTP user is chrooted to `/home/<sftp-user>`, SFTP clients see that same folder as:
+
+```text
+/public_html
+```
+
+Use `/public_html` as the WordPress root in WinSCP or migration tools. For example, a generic plugin directory would be:
+
+```text
+/public_html/wp-content/plugins/example-plugin/
+```
+
+Do not use the VPS Docker volume path when connected to the SFTP container. That path is only valid when you are logged in to the VPS host by SSH.
 
 ### Turn SFTP OFF
 
@@ -97,6 +122,8 @@ Remove `tools` from `COMPOSE_PROFILES` (or delete the variable) and redeploy. Wo
 
 Configure host, port, username, password, and directory in the migration plugin according to **your** setup.
 
+For SFTP container connections, the WordPress root is `/public_html`. For VPS SSH connections, use the Docker volume path on the VPS host.
+
 ---
 
 ## Optional SFTP variables
@@ -106,4 +133,5 @@ Configure host, port, username, password, and directory in the migration plugin 
 | `COMPOSE_PROFILES` | — | Set to `tools` to start SFTP |
 | `SFTP_USER` | `wpuser` | SFTP username |
 | `SFTP_PASSWORD` | — | SFTP password (set in Dokploy) |
+| `SFTP_PORT` | `2222` | Public VPS port forwarded to the SFTP container |
 | `SFTP_UID` | `33` | File owner UID (`www-data`) |

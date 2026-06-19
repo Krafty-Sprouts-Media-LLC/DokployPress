@@ -213,7 +213,7 @@ services:
     volumes:
       - wordpress_data:/home/${SFTP_USER:-wpuser}/public_html
     ports:
-      - "22"
+      - "${SFTP_PORT:-2222}:22"
     networks:
       - dokploy-network
     deploy:
