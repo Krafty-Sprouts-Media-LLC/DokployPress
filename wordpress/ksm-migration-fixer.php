@@ -1,8 +1,9 @@
 <?php
 /**
  * Plugin Name: KSM Migration Fixer
- * Plugin URI:  https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack
- * Description: Must-use plugin for KSM WPDokploystack. Automatically runs
+ * Plugin URI:  https://github.com/Krafty-Sprouts-Media-LLC/DokployPress
+ * Description: Must-use plugin for DokployPress. Unofficial WordPress stack for
+ *              Dokploy — by Krafty Sprouts Media. Automatically runs
  *              WordPress-level post-migration cleanup after a migration tool
  *              (e.g. Migrate Guru) completes. Handles permalink flushing,
  *              Redis cache reconnection, migration artefact removal, and
@@ -16,7 +17,7 @@
  * WordPress container entrypoint on every container start, ensuring it
  * survives migration tool overwrites of wp-content.
  *
- * @package    KSM-WPDokploystack
+ * @package    DokployPress
  * @subpackage MigrationFixer
  * @since      1.7.0
  */

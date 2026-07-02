@@ -2,12 +2,12 @@
   {
     "id": "dokploypress",
     "name": "DokployPress",
-    "version": "2.0.0",
-    "description": "Production-ready WordPress for Dokploy with Nginx, Redis object cache, MilliCache full-page caching, phpMyAdmin, and WP-CLI",
+    "version": "2.0.1",
+    "description": "Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media. Not affiliated with or endorsed by Dokploy. Nginx, Redis object cache, MilliCache full-page caching, phpMyAdmin, and WP-CLI.",
     "logo": "logo.svg",
     "links": {
-      "github": "https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack",
-      "docs": "https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack#readme",
+      "github": "https://github.com/Krafty-Sprouts-Media-LLC/DokployPress",
+      "docs": "https://github.com/Krafty-Sprouts-Media-LLC/DokployPress#readme",
       "upstream": "https://github.com/itsmereal/dokploy-wp"
     },
     "tags": ["wordpress", "cms", "redis", "nginx", "dokploy", "full-page-cache", "self-hosted"]

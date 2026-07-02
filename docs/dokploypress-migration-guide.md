@@ -1,10 +1,7 @@
 <!--
 DokployPress identity migration plan and guide.
 
-Covers phased rebranding from KSM WPDokploystack to DokployPress without
-breaking existing Dokploy deployments, Docker volumes, or GHCR image updates.
-
-@package KSM-WPDokploystack
+@package DokployPress
 @subpackage Documentation
 -->
 
@@ -12,7 +9,8 @@ breaking existing Dokploy deployments, Docker volumes, or GHCR image updates.
 
 > **Status:** Completed in **2.0.0** (same repository)  
 > **Audience:** Reference for identifier changes and upgrade safety  
-> **Product name:** DokployPress (formerly KSM WordPress Stack / KSM WPDokploystack)
+> **Product name:** DokployPress (formerly KSM WordPress Stack / KSM WPDokploystack)  
+> **Affiliation:** Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media. **Not affiliated with or endorsed by Dokploy.**
 
 This guide documents the **2.0.0 DokployPress rebrand** in this repository. For the production upgrade checklist, see [upgrade-to-2.0.0.md](upgrade-to-2.0.0.md).
 
@@ -118,8 +116,8 @@ Optional: publish **additional** `dokploypress-*` images for new installs while 
 - [ ] Choose final repo name (e.g. `DokployPress`)
 - [ ] In GitHub: **Settings → General → Repository name** → rename
 - [ ] Confirm GitHub redirect works:
-  - `https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack` → new URL
-  - `https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/WPDokploystack/main/meta.json` → redirect
+  - `https://github.com/Krafty-Sprouts-Media-LLC/DokployPress` → new URL
+  - `https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/DokployPress/main/meta.json` → redirect
 - [ ] Update all hardcoded URLs in repo:
   - [ ] `meta.json` → `links.github`, `links.docs`
   - [ ] `README.md` → template Base URL, manual compose URL
@@ -223,7 +221,7 @@ This is independent of the DokployPress rebrand.
    image: ghcr.io/krafty-sprouts-media-llc/dokploy-wp-wordpress:1.14.3
    ```
 
-   Change `1.14.3` → latest version from [releases](https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack/releases) or `meta.json`.
+   Change `1.14.3` → latest version from [releases](https://github.com/Krafty-Sprouts-Media-LLC/DokployPress/releases) or `meta.json`.
 
 3. Click **Deploy** / **Redeploy**.
 4. Confirm containers are healthy; spot-check site and `wp redis status`.

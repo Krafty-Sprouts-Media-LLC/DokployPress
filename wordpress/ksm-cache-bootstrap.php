@@ -1,15 +1,16 @@
 <?php
 /**
  * Plugin Name: KSM Cache Bootstrap
- * Plugin URI:  https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack
- * Description: Must-use plugin for KSM WPDokploystack. Activates Redis Object
- *              Cache and MilliCache on the first web request after WordPress
+ * Plugin URI:  https://github.com/Krafty-Sprouts-Media-LLC/DokployPress
+ * Description: Must-use plugin for DokployPress. Unofficial WordPress stack for
+ *              Dokploy — by Krafty Sprouts Media. Activates Redis Object Cache
+ *              and MilliCache on the first web request after WordPress
  *              installation, so caching works without a manual redeploy.
  * Version:     1.1.0
  * Author:      Krafty Sprouts Media LLC
  * Author URI:  https://kraftysprouts.media
  *
- * @package    KSM-WPDokploystack
+ * @package    DokployPress
  * @subpackage CacheBootstrap
  * @since      1.8.0
  */

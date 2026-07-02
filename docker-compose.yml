@@ -1,6 +1,8 @@
 # =============================================================================
 # docker-compose.yml
 # DokployPress — Main Docker Compose stack definition
+# Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media.
+# Not affiliated with or endorsed by Dokploy.
 #
 # Services: nginx, wordpress, db (MariaDB), redis, plugin-installer,
 #           phpmyadmin, wp-cron, sftp (optional, tools profile)

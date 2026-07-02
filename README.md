@@ -1,6 +1,10 @@
 # DokployPress
 
+**Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media**
+
 Production-ready WordPress deployment stack for Dokploy with Redis object cache, MilliCache full-page caching, Nginx, and management tools.
+
+> **Disclaimer:** DokployPress is an independent project by [Krafty Sprouts Media LLC](https://github.com/Krafty-Sprouts-Media-LLC). It is **not affiliated with or endorsed by** [Dokploy](https://dokploy.com) or the WordPress Foundation.
 
 Forked and extended from [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp) by [Al-Mamun Talukder](https://itsmereal.com).
 
@@ -31,18 +35,22 @@ Pick one of the two deploy methods below, then follow the shared **Post-Deploy S
 4. Choose **Template**
 5. Set the **Base URL** to:
    ```
-   https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/WPDokploystack/main
+   https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/DokployPress/main
    ```
 6. You will find **"DokployPress"**
 7. Click **Create** and **Confirm**
 8. Open **Environment** — `STACK_SLUG` is **already set** to the service ID shown under the stack name (e.g. `mysite-dokploypress-8zv3p5`). **Before first Deploy**, replace it with your short project name (e.g. `STACK_SLUG=mysite`) so volumes are `mysite_data`, not `mysite-dokploypress-8zv3p5_data`
 9. Click **Deploy**
 
-### Option B: Manual Compose Deploy
+### Option B: Manual Compose Deploy (GitHub)
 
 1. Create a new **Compose** service in Dokploy
-2. Point to: `https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack`
-3. Set Compose Path: `./docker-compose.yml`
+2. **Provider → GitHub** → Repository: `DokployPress` → Branch: `main`
+3. Set **Compose Path** to:
+   ```
+   ./blueprints/dokploypress/docker-compose.yml
+   ```
+   > Use this blueprint path for production — it pulls pre-built `dokploypress-*` images from GHCR. The root `./docker-compose.yml` builds images on your server from source and is intended for local development.
 4. Go to **Environment** tab and add:
    ```
    STACK_SLUG=your-short-name
@@ -344,7 +352,7 @@ The same test runs automatically in GitHub Actions on every push to `main` (`.gi
 
 This stack is based on [dokploy-wp](https://github.com/itsmereal/dokploy-wp) by **Al-Mamun Talukder** ([@almamunreal](https://twitter.com/almamunreal)). See [itsmereal.com](https://itsmereal.com) for the original article and project.
 
-Maintained and extended by [Krafty Sprouts Media LLC](https://github.com/Krafty-Sprouts-Media-LLC).
+Maintained and extended by [Krafty Sprouts Media LLC](https://github.com/Krafty-Sprouts-Media-LLC). DokployPress is unofficial third-party software and is not a Dokploy product.
 
 ## License
 

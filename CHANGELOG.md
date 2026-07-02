@@ -10,6 +10,17 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.0.1] - 02/07/2026
+
+### Changed
+- **Affiliation disclaimers** — README, `meta.json` template description, `docs/hosting-guide.md`, `docs/upgrade-to-2.0.0.md`, and `docs/dokploypress-migration-guide.md` state that DokployPress is unofficial and not affiliated with or endorsed by Dokploy.
+- GitHub repository renamed `WPDokploystack` → `DokployPress`. Updated `meta.json`, `README.md`, `docs/hosting-guide.md`, and mu-plugin `Plugin URI` links.
+- `wordpress/ksm-cache-bootstrap.php` and `wordpress/ksm-migration-fixer.php` — Plugin descriptions reference DokployPress.
+- `README.md`, `docs/hosting-guide.md`, and `docs/upgrade-to-2.0.0.md` — GitHub deploys use Compose Path `./blueprints/dokploypress/docker-compose.yml` (GHCR images), not root `./docker-compose.yml` (local build).
+- `tests/multisite-regression-test.sh` — Assert affiliation disclaimers in README and `meta.json`.
+
+---
+
 ## [2.0.0] - 02/07/2026
 
 ### Added
@@ -17,7 +28,7 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 - `docs/upgrade-to-2.0.0.md` — Production upgrade checklist: swap three image lines, keep `STACK_SLUG`, redeploy.
 
 ### Changed
-- **DokployPress rebrand (2.0.0)** — Product identity, template id, and GHCR images renamed from `dokploy-wp-*` to `dokploypress-*`. Repository remains `WPDokploystack` on GitHub.
+- **DokployPress rebrand (2.0.0)** — Product identity, template id, and GHCR images renamed from `dokploy-wp-*` to `dokploypress-*`.
 - `.github/workflows/build-images.yml` — Publishes `ghcr.io/krafty-sprouts-media-llc/dokploypress-{nginx,wordpress,plugin-installer}` only.
 - `meta.json` — `id: dokploypress`, `name: DokployPress`, version `2.0.0`.
 - `README.md` and `docs/hosting-guide.md` — DokployPress naming, template selection, and image references.

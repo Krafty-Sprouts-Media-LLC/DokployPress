@@ -1,5 +1,7 @@
 # Easily Host WordPress Sites Using Dokploy with Redis and Nginx
 
+> **DokployPress:** Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media. **Not affiliated with or endorsed by Dokploy.**
+
 > **Original Article:** [Easily Host WordPress Sites Using Dokploy with Redis and Nginx](https://itsmereal.com/easily-host-wordpress-sites-using-dokploy-with-redis-and-nginx/)
 > **Original Author:** Al-Mamun Talukder ([@almamunreal](https://twitter.com/almamunreal)) — Full-Stack Developer, Minimalist Designer, Tech Enthusiast. Founder of [Omnixima](https://itsmereal.com).
 > **Published:** December 19, 2025 | **Adapted for DokployPress**
@@ -11,6 +13,8 @@
 This guide is adapted from Al-Mamun Talukder's excellent article on hosting WordPress on Dokploy. The original author switched from Coolify (a Docker-based server management tool) to Dokploy, and to replicate the same production performance — featuring Redis caching, Nginx reverse proxying, and PHP-FPM — he created a custom Docker Compose stack specifically optimized for Dokploy.
 
 This documentation captures those steps and supplements them with additional details for **DokployPress** deployments.
+
+DokployPress is maintained by Krafty Sprouts Media LLC and is **not affiliated with or endorsed by Dokploy**.
 
 For upgrading an existing 1.x install (`dokploy-wp-*` images), see [upgrade-to-2.0.0.md](upgrade-to-2.0.0.md).
 
@@ -64,7 +68,7 @@ Rather than using Dokploy's built-in official WordPress template (which can surf
 | **WP-Cron**        | Alpine sidecar that triggers `wp-cron.php` every 5 min via the internal Docker network. Eliminates reliance on visitor traffic for scheduled tasks. |
 | **SFTP** (optional) | Separate SFTP container — enable with `COMPOSE_PROFILES=tools` |
 
-The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack**
+The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/DokployPress**
 
 ---
 
@@ -78,18 +82,22 @@ The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/WPDokpl
 4. Choose **Template**.
 5. Set the **Base URL** to:
    ```
-   https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/WPDokploystack/main
+   https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/DokployPress/main
    ```
 6. Find and select **"DokployPress"**.
 7. Click **Create** and then **Confirm**.
 8. Open **Environment** — `STACK_SLUG` is already set to the service ID under the stack name (e.g. `mysite-ksmwpstack-8zv3p5`, same string as on the **General** tab). **Before first Deploy**, replace it with your short project name (e.g. `STACK_SLUG=mysite`) so host volumes are `mysite_data`, `mysite_db_data`, `mysite_redis_data`.
 9. Click **Deploy** once ready.
 
-### Option B: Manual Compose Deploy
+### Option B: Manual Compose Deploy (GitHub)
 
 1. Create a new **Compose** service in Dokploy.
-2. Point to: `https://github.com/Krafty-Sprouts-Media-LLC/WPDokploystack`
-3. Set Compose Path: `./docker-compose.yml`
+2. **Provider → GitHub** → Repository: `DokployPress` → Branch: `main`
+3. Set **Compose Path** to:
+   ```
+   ./blueprints/dokploypress/docker-compose.yml
+   ```
+   This blueprint pulls pre-built `dokploypress-*` images from GHCR. The root `./docker-compose.yml` builds on the server and is for local development.
 4. Go to the **Environment** tab and add:
    ```env
    STACK_SLUG=your-short-name
@@ -321,7 +329,7 @@ Published to GHCR as `:latest`. When GitHub Actions builds a new release, **Rede
 
 > **Option A (template):** Dokploy stores a compose **snapshot** at create time. To change a pinned tag (e.g. MariaDB `10.6` → `10.11`), edit the **Compose** tab manually, then Redeploy. Image `:latest` services still update on Redeploy without compose edits.
 
-> **Option B (GitHub-linked):** **General → Pull** fetches the latest `docker-compose.yml` from the repo, then **Redeploy**.
+> **Option B (GitHub-linked):** **General → Pull** fetches the latest blueprint compose from the repo, then **Redeploy**.
 
 No action is required for custom GHCR images beyond clicking **Redeploy** after a new stack release.
 
@@ -337,14 +345,14 @@ The template was consumed at deploy time — Dokploy stored a snapshot of the co
 
 To apply compose-level changes:
 1. In Dokploy, go to the service's **Compose** tab.
-2. Manually apply the relevant changes from the updated `docker-compose.yml` in this repo.
+2. Manually apply the relevant changes from `blueprints/dokploypress/docker-compose.yml` in this repo.
 3. Click **Redeploy**.
 
 #### Option B (Linked to GitHub Repo)
 
 Dokploy can fetch the latest compose from the repo. To update:
 1. In Dokploy, go to the service's **General** tab.
-2. Click **Pull** to fetch the latest `docker-compose.yml`.
+2. Click **Pull** to fetch the latest blueprint compose (`./blueprints/dokploypress/docker-compose.yml`).
 3. Click **Redeploy**.
 
 New or changed services, ports, and environment variable defaults will be applied.

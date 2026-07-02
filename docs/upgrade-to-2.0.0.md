@@ -1,11 +1,13 @@
 <!--
-Production upgrade guide: KSM WPDokploystack 1.x (dokploy-wp-*) → DokployPress 2.0.0 (dokploypress-*).
+Production upgrade guide: DokployPress 2.0.0 (dokploypress-*) from legacy 1.x (dokploy-wp-*).
 
 @package DokployPress
 @subpackage Documentation
 -->
 
 # Upgrade to DokployPress 2.0.0
+
+> **Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media.** Not affiliated with or endorsed by Dokploy.
 
 Use this checklist when moving a live site from `dokploy-wp-*` (1.x) to `dokploypress-*` (2.0.0). **No data migration** — Docker volumes and `STACK_SLUG` stay the same.
 
@@ -16,6 +18,16 @@ Use this checklist when moving a live site from `dokploy-wp-*` (1.x) to `dokploy
 3. Note your current `STACK_SLUG` — **do not change it**.
 
 ## Upgrade steps (Dokploy)
+
+### GitHub provider settings
+
+| Field | Value |
+|-------|--------|
+| **Repository** | `DokployPress` |
+| **Branch** | `main` |
+| **Compose Path** | `./blueprints/dokploypress/docker-compose.yml` |
+
+Click **Preview Compose** — you should see `image: ghcr.io/.../dokploypress-wordpress:2.0.0` (not `build:`).
 
 ### 1. Update image lines only
 

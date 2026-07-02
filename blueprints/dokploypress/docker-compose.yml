@@ -1,6 +1,8 @@
 # =============================================================================
 # docker-compose.yml (blueprint)
 # DokployPress — Dokploy blueprint compose (uses pre-built GHCR images)
+# Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media.
+# Not affiliated with or endorsed by Dokploy.
 #
 # @package DokployPress
 # @since   2.0.0
