@@ -1,7 +1,7 @@
 FROM wordpress:php8.3-fpm
 
 # =============================================================================
-# KSM WPDokploystack — WordPress container image
+# DokployPress — WordPress container image
 #
 # Extends the official WordPress PHP-FPM image with:
 #   - GD, ZIP, OPcache PHP extensions
@@ -9,10 +9,10 @@ FROM wordpress:php8.3-fpm
 #   - WP-CLI (for admin automation and the migration auto-fix)
 #   - php-fpm-healthcheck (for Dokploy health checks)
 #   - Custom entrypoint for env-driven PHP config and migration self-healing
-#   - KSM Migration Fixer mu-plugin (Layer 2 of migration auto-fix)
-#   - KSM Cache Bootstrap mu-plugin (activates cache plugins on first request)
+#   - DokployPress Migration Fixer mu-plugin (Layer 2 of migration auto-fix)
+#   - DokployPress Cache Bootstrap mu-plugin (activates cache plugins on first request)
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.0.0
 # =============================================================================
 
@@ -52,12 +52,12 @@ RUN echo "pm.status_path = /status" >> /usr/local/etc/php-fpm.d/zz-docker.conf
 COPY docker-entrypoint-custom.sh /usr/local/bin/docker-entrypoint-custom.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint-custom.sh
 
-# Bundle KSM mu-plugins for entrypoint deploy and fresh-volume tar extract.
-RUN mkdir -p /usr/local/lib/ksm /usr/src/wordpress/wp-content/mu-plugins
-COPY ksm-migration-fixer.php /usr/local/lib/ksm/ksm-migration-fixer.php
-COPY ksm-cache-bootstrap.php /usr/local/lib/ksm/ksm-cache-bootstrap.php
-COPY ksm-migration-fixer.php /usr/src/wordpress/wp-content/mu-plugins/ksm-migration-fixer.php
-COPY ksm-cache-bootstrap.php /usr/src/wordpress/wp-content/mu-plugins/ksm-cache-bootstrap.php
+# Bundle DokployPress mu-plugins for entrypoint deploy and fresh-volume tar extract.
+RUN mkdir -p /usr/local/lib/dokploypress /usr/src/wordpress/wp-content/mu-plugins
+COPY dokploypress-migration-fixer.php /usr/local/lib/dokploypress/dokploypress-migration-fixer.php
+COPY dokploypress-cache-bootstrap.php /usr/local/lib/dokploypress/dokploypress-cache-bootstrap.php
+COPY dokploypress-migration-fixer.php /usr/src/wordpress/wp-content/mu-plugins/dokploypress-migration-fixer.php
+COPY dokploypress-cache-bootstrap.php /usr/src/wordpress/wp-content/mu-plugins/dokploypress-cache-bootstrap.php
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html

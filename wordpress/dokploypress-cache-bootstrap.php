@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: KSM Cache Bootstrap
+ * Plugin Name: DokployPress Cache Bootstrap
  * Plugin URI:  https://github.com/Krafty-Sprouts-Media-LLC/DokployPress
  * Description: Must-use plugin for DokployPress. Unofficial WordPress stack for
  *              Dokploy — by Krafty Sprouts Media. Activates Redis Object Cache
@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * @since 1.1.0
  * @return bool
  */
-function ksm_cache_bootstrap_is_network_setup_pending() {
+function dokploypress_cache_bootstrap_is_network_setup_pending() {
 	if ( ! defined( 'WP_ALLOW_MULTISITE' ) || ! WP_ALLOW_MULTISITE ) {
 		return false;
 	}
@@ -47,7 +47,7 @@ function ksm_cache_bootstrap_is_network_setup_pending() {
  * @since 1.0.0
  * @return void
  */
-function ksm_cache_bootstrap_run() {
+function dokploypress_cache_bootstrap_run() {
 	static $ran = false;
 
 	if ( $ran ) {
@@ -61,7 +61,7 @@ function ksm_cache_bootstrap_run() {
 
 	$ran = true;
 
-	if ( ksm_cache_bootstrap_is_network_setup_pending() ) {
+	if ( dokploypress_cache_bootstrap_is_network_setup_pending() ) {
 		return;
 	}
 
@@ -87,4 +87,4 @@ function ksm_cache_bootstrap_run() {
 	}
 }
 
-add_action( 'plugins_loaded', 'ksm_cache_bootstrap_run', 1 );
+add_action( 'plugins_loaded', 'dokploypress_cache_bootstrap_run', 1 );

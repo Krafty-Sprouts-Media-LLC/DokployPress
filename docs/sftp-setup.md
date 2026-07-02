@@ -14,7 +14,7 @@ Connect WinSCP (or SSH) to your **VPS on port 22** with your server login. WordP
 
 **After replacing the pre-filled `STACK_SLUG` before first Deploy** (recommended):
 
-Dokploy sets `STACK_SLUG=mysite-ksmwpstack-8zv3p5` on create (same as the ID under the stack name). Replace with `STACK_SLUG=mysite` before Deploy, then files are at:
+Dokploy sets `STACK_SLUG=mysite-dokploypress-8zv3p5` on create (same as the ID under the stack name). Replace with `STACK_SLUG=mysite` before Deploy, then files are at:
 
 ```
 /var/lib/docker/volumes/mysite_data/_data/
@@ -23,7 +23,7 @@ Dokploy sets `STACK_SLUG=mysite-ksmwpstack-8zv3p5` on create (same as the ID und
 **If you leave the pre-filled value**, volumes use that long prefix:
 
 ```
-/var/lib/docker/volumes/mysite-ksmwpstack-8zv3p5_data/_data/
+/var/lib/docker/volumes/mysite-dokploypress-8zv3p5_data/_data/
 ```
 
 In WinSCP you may browse to `/var/lib/docker/volumes/mysite_data/` first — open the **`_data` subfolder** for the WordPress root (`wp-admin`, `wp-content`, `wp-includes`).

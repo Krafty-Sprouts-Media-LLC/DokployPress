@@ -1,12 +1,12 @@
 # =============================================================================
 # default.conf.template
-# KSM WPDokploystack — Nginx site configuration template
+# DokployPress — Nginx site configuration template
 #
 # Processed by envsubst at container startup (NGINX_CLIENT_MAX_BODY_SIZE).
 # Supports single-site and multisite (subfolder + subdomain) WordPress installs.
 # Served behind Traefik reverse proxy; server_name _ accepts all hostnames.
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.0.0
 # =============================================================================
 

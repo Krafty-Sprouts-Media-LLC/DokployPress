@@ -10,6 +10,15 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.0.2] - 02/07/2026
+
+### Changed
+- `README.md`, `docs/hosting-guide.md`, and `docs/upgrade-to-2.0.0.md` — Clarified that WordPress-generated multisite `define(...)` lines must be stored inside `WORDPRESS_MULTISITE_CONFIG`, not entered as standalone Dokploy environment rows.
+- Replaced remaining live-facing `ksmwpstack` examples, mu-plugin display names, and internal package headers with DokployPress naming.
+- Renamed bundled mu-plugin files from `ksm-*.php` to `dokploypress-*.php`; the WordPress entrypoint removes the old filenames from existing volumes on redeploy to prevent duplicate mu-plugin loading.
+
+---
+
 ## [2.0.1] - 02/07/2026
 
 ### Changed

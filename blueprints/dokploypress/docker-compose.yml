@@ -10,7 +10,7 @@
 
 services:
   nginx:
-    image: ghcr.io/krafty-sprouts-media-llc/dokploypress-nginx:2.0.1
+    image: ghcr.io/krafty-sprouts-media-llc/dokploypress-nginx:2.0.2
     pull_policy: always
     ports:
       - "80"
@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
 
   wordpress:
-    image: ghcr.io/krafty-sprouts-media-llc/dokploypress-wordpress:2.0.1
+    image: ghcr.io/krafty-sprouts-media-llc/dokploypress-wordpress:2.0.2
     pull_policy: always
     environment:
       - WORDPRESS_DB_HOST=db
@@ -114,7 +114,7 @@ services:
     restart: unless-stopped
 
   plugin-installer:
-    image: ghcr.io/krafty-sprouts-media-llc/dokploypress-plugin-installer:2.0.1
+    image: ghcr.io/krafty-sprouts-media-llc/dokploypress-plugin-installer:2.0.2
     pull_policy: always
     volumes:
       - wordpress_data:/var/www/html

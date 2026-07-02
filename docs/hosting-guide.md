@@ -86,7 +86,7 @@ The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/Dokploy
    ```
 6. Find and select **"DokployPress"**.
 7. Click **Create** and then **Confirm**.
-8. Open **Environment** — `STACK_SLUG` is already set to the service ID under the stack name (e.g. `mysite-ksmwpstack-8zv3p5`, same string as on the **General** tab). **Before first Deploy**, replace it with your short project name (e.g. `STACK_SLUG=mysite`) so host volumes are `mysite_data`, `mysite_db_data`, `mysite_redis_data`.
+8. Open **Environment** — `STACK_SLUG` is already set to the service ID under the stack name (e.g. `mysite-dokploypress-8zv3p5`, same string as on the **General** tab). **Before first Deploy**, replace it with your short project name (e.g. `STACK_SLUG=mysite`) so host volumes are `mysite_data`, `mysite_db_data`, `mysite_redis_data`.
 9. Click **Deploy** once ready.
 
 ### Option B: Manual Compose Deploy (GitHub)
@@ -163,7 +163,7 @@ On a **new** site you should see:
 | Location | What |
 |----------|------|
 | **Plugins** | Redis Object Cache + MilliCache (inactive until bootstrap runs) |
-| **Plugins → Must-Use** (bottom of screen) | KSM Cache Bootstrap + KSM Migration Fixer |
+| **Plugins → Must-Use** (bottom of screen) | DokployPress Cache Bootstrap + DokployPress Migration Fixer |
 
 **Plugins stay inactive until the first front-end page load** (not wp-admin only). Visit your site homepage while logged out, then refresh **Plugins**.
 
@@ -188,12 +188,12 @@ wp millicache drop --allow-root
 
 ### Stack Naming
 
-On template **Create**, Dokploy pre-fills **Environment** with `STACK_SLUG` equal to the service ID shown under the stack name on the **General** tab (e.g. `mysite-ksmwpstack-8zv3p5`). There is no separate wizard field — check **Environment** after create.
+On template **Create**, Dokploy pre-fills **Environment** with `STACK_SLUG` equal to the service ID shown under the stack name on the **General** tab (e.g. `mysite-dokploypress-8zv3p5`). There is no separate wizard field — check **Environment** after create.
 
 **Replace before first Deploy** (recommended):
 
 1. **Create** the service — **do not Deploy yet**
-2. Open **Environment** — note the pre-filled value, e.g. `STACK_SLUG=mysite-ksmwpstack-8zv3p5`
+2. Open **Environment** — note the pre-filled value, e.g. `STACK_SLUG=mysite-dokploypress-8zv3p5`
 3. **Replace** with your short project slug, e.g. `STACK_SLUG=mysite`
 4. Click **Deploy** (first deploy only)
 
@@ -273,7 +273,7 @@ That inner `_data` path is the site root (`wp-admin`, `wp-content`, `wp-includes
 | Variable             | Default    | Description                                                                   |
 |----------------------|------------|-------------------------------------------------------------------------------|
 | `WP_MULTISITE_MODE`  | `disabled` | WordPress Multisite mode. `disabled` = single-site (default). `subfolder` = path-based sub-sites (`/site1`, `/site2`). `subdomain` = subdomain-based sub-sites (`site1.domain.com`). See **WordPress Multisite** section below. |
-| `WORDPRESS_MULTISITE_CONFIG` | — | Optional WordPress-generated multisite constants. The entrypoint writes them into a managed `wp-config.php` block after running Network Setup. |
+| `WORDPRESS_MULTISITE_CONFIG` | — | Optional WordPress-generated multisite constants. Must be entered as the value of this environment variable, not as standalone `define(...)` environment rows. The entrypoint writes it into a managed `wp-config.php` block after running Network Setup. |
 
 ### Resource Limits
 
@@ -907,7 +907,7 @@ All rewrites are guarded by `!-e $request_filename` — they are no-ops on singl
 | Can convert later | ✅ Yes (WP CLI) | ✅ Yes (WP CLI) |
 | Install on existing WP? | ✅ Yes | ✅ Yes |
 
-> **Important for subdomain mode:** You **must** add a wildcard DNS record (`*.yourdomain.com → your server IP`) at your DNS provider **before** the Network Setup wizard runs. Without wildcard DNS, new subsites will not resolve. In Dokploy, you also need a wildcard domain entry (`*.yourdomain.com`) pointing to the nginx service on port 80.
+> **Important for subdomain mode:** You **must** add a wildcard DNS record (`*.yourdomain.com → your server IP`) at your DNS provider **before** the Network Setup wizard runs. Without wildcard DNS, new subsites will not resolve. In Dokploy, you also need a wildcard domain entry (`*.yourdomain.com`) pointing to the nginx service on port 80. DNS alone is not enough; Traefik/Dokploy still needs the wildcard domain route.
 
 ### Phase 1 — Enable Network Setup
 
@@ -926,7 +926,7 @@ All rewrites are guarded by `!-e $request_filename` — they are no-ops on singl
 
 ### Phase 2 — Run the Network Setup Wizard
 
-WordPress asks you to **deactivate all plugins** before creating the network. On this stack, Redis Object Cache and MilliCache are normally auto-activated by the `ksm-cache-bootstrap` mu-plugin. **From stack version 1.14.5 onward**, that bootstrap is paused automatically while Network Setup is in progress (`WP_ALLOW_MULTISITE` is true but `MULTISITE` is not yet defined), so you can deactivate plugins in wp-admin and they will stay off.
+WordPress asks you to **deactivate all plugins** before creating the network. On this stack, Redis Object Cache and MilliCache are normally auto-activated by the `dokploypress-cache-bootstrap` mu-plugin. **From stack version 1.14.5 onward**, that bootstrap is paused automatically while Network Setup is in progress (`WP_ALLOW_MULTISITE` is true but `MULTISITE` is not yet defined), so you can deactivate plugins in wp-admin and they will stay off.
 
 1. In **Plugins**, deactivate **Redis Object Cache** and **MilliCache** (and any other active plugins).
 2. In **Tools → Network Setup**, choose your network type (must match `WP_MULTISITE_MODE`).
@@ -934,22 +934,38 @@ WordPress asks you to **deactivate all plugins** before creating the network. On
 4. Click **Install**.
 5. WordPress displays two blocks of code. **Do not** paste these directly into `wp-config.php` — the entrypoint manages that file. Instead:
 
-**Add only the WordPress-generated multisite constants to `WORDPRESS_MULTISITE_CONFIG`** in Dokploy Environment. They look like this (values will differ for your site):
+**Add only the WordPress-generated multisite constants to `WORDPRESS_MULTISITE_CONFIG`** in Dokploy Environment. They must be the value of the `WORDPRESS_MULTISITE_CONFIG` variable.
+
+If Dokploy shows a plain text environment editor, use one `KEY=value` line:
 
 ```env
-WORDPRESS_MULTISITE_CONFIG=
-    define('MULTISITE', true);
-    define('SUBDOMAIN_INSTALL', true);
-    define('DOMAIN_CURRENT_SITE', 'yourdomain.com');
-    define('PATH_CURRENT_SITE', '/');
-    define('SITE_ID_CURRENT_SITE', 1);
-    define('BLOG_ID_CURRENT_SITE', 1);
+WORDPRESS_MULTISITE_CONFIG=define( 'MULTISITE', true ); define( 'SUBDOMAIN_INSTALL', true ); define( 'DOMAIN_CURRENT_SITE', 'yourdomain.com' ); define( 'PATH_CURRENT_SITE', '/' ); define( 'SITE_ID_CURRENT_SITE', 1 ); define( 'BLOG_ID_CURRENT_SITE', 1 );
 ```
 
-> For subfolder mode, `SUBDOMAIN_INSTALL` is `false` and WordPress may also add `define('MULTISITE_COOKIE_PATH', '/')` and similar. Copy **exactly** what WordPress generated in the wizard — the values are specific to your install.
+If Dokploy shows separate **Name** and **Value** fields, use this:
+
+```text
+Name: WORDPRESS_MULTISITE_CONFIG
+Value:
+define( 'MULTISITE', true );
+define( 'SUBDOMAIN_INSTALL', true );
+define( 'DOMAIN_CURRENT_SITE', 'yourdomain.com' );
+define( 'PATH_CURRENT_SITE', '/' );
+define( 'SITE_ID_CURRENT_SITE', 1 );
+define( 'BLOG_ID_CURRENT_SITE', 1 );
+```
+
+Do **not** add bare `define(...)` lines as separate environment rows. They are PHP constants, not environment variable names, and the stack will not read them unless they are inside `WORDPRESS_MULTISITE_CONFIG`.
+
+> For subfolder mode, `SUBDOMAIN_INSTALL` is `false` and WordPress may also add `define( 'MULTISITE_COOKIE_PATH', '/' );` and similar. Copy **exactly** what WordPress generated in the wizard — the values are specific to your install.
 
 6. Click **Redeploy**.
-7. Log back into WP Admin — you now have a **My Sites** menu and **Network Admin** panel.
+7. Check **Logs → wordpress** for `WORDPRESS_MULTISITE_CONFIG applied to wp-config.php`.
+8. Log back into WP Admin — you now have a **My Sites** menu and **Network Admin** panel.
+
+#### Network Setup says an existing network was detected
+
+This means WordPress found multisite database tables, so the network was already created or partially created. In most cases, do **not** remove database tables. Finish the setup by making sure `WORDPRESS_MULTISITE_CONFIG` contains the generated constants, redeploy, and confirm the log line `WORDPRESS_MULTISITE_CONFIG applied to wp-config.php`.
 
 #### Network Setup: plugins keep reactivating (stack before 1.14.5)
 
@@ -959,8 +975,13 @@ If Redis Object Cache and MilliCache turn back on immediately after you deactiva
 
 ```bash
 docker exec -it <wordpress-container-name> bash
-mv /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php \
-   /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php.off
+if [ -f /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php ]; then
+  mv /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php \
+     /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php.off
+elif [ -f /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php ]; then
+  mv /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php \
+     /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php.off
+fi
 wp plugin deactivate redis-cache millicache --allow-root --path=/var/www/html
 ```
 

@@ -6,7 +6,7 @@ name: Create GitHub Release on Tag
 # version tag (v*.*.*) is pushed. Extracts the relevant section from
 # CHANGELOG.md and uses it as the release body.
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.7.0
 # =============================================================================
 

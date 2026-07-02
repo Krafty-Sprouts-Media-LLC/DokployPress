@@ -1,10 +1,10 @@
 # =============================================================================
 # compose.override.yml
-# KSM WPDokploystack — Local/CI test overrides (use with main docker-compose.yml)
+# DokployPress — Local/CI test overrides (use with main docker-compose.yml)
 #
 # Publishes Nginx on TEST_HTTP_PORT (default 18080) for smoke tests.
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.8.0
 # =============================================================================
 

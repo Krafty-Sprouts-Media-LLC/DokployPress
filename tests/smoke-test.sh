@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # smoke-test.sh
-# KSM WPDokploystack — Integration smoke test
+# DokployPress — Integration smoke test
 #
 # Brings up the full stack, installs WordPress, and verifies:
 #   - All containers healthy
@@ -13,7 +13,7 @@
 #   bash tests/smoke-test.sh
 #   bash tests/smoke-test.sh --keep   # leave stack running after test
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.8.0
 # =============================================================================
 
@@ -100,9 +100,9 @@ sleep 2
 curl -fsS "${BASE_URL}/" >/dev/null || true
 
 info "Checking mu-plugins are present..."
-${WP} test -f /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php
-${WP} test -f /var/www/html/wp-content/mu-plugins/ksm-migration-fixer.php
-pass "KSM mu-plugins present"
+${WP} test -f /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php
+${WP} test -f /var/www/html/wp-content/mu-plugins/dokploypress-migration-fixer.php
+pass "DokployPress mu-plugins present"
 
 info "Checking plugins are present..."
 ${WP} test -f /var/www/html/wp-content/plugins/redis-cache/redis-cache.php

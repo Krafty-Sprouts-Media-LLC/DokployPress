@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # docker-entrypoint-custom.sh
-# KSM WPDokploystack — WordPress container custom entrypoint
+# DokployPress — WordPress container custom entrypoint
 #
 # Responsibilities:
 #   1. Apply PHP/OPcache settings from environment variables
@@ -15,11 +15,11 @@
 #       existing installs also get the constant on every container start)
 #   4a. Enforce WP_ALLOW_MULTISITE in wp-config.php when WP_MULTISITE_MODE
 #       is set to 'subfolder' or 'subdomain' — fixes missing Network Setup menu
-#   5. Deploy KSM mu-plugins after core exists (avoids fresh-install wipe by tar extract)
+#   5. Deploy DokployPress mu-plugins after core exists (avoids fresh-install wipe by tar extract)
 #   6. Start php-fpm via upstream entrypoint
-#      (Cache plugin activation runs via ksm-cache-bootstrap mu-plugin on first HTTP request.)
+#      (Cache plugin activation runs via dokploypress-cache-bootstrap mu-plugin on first HTTP request.)
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.7.0
 # =============================================================================
 
@@ -355,7 +355,7 @@ if [ -f "${WP_CONFIG}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Deploy KSM mu-plugins — always refresh from image bundle
+# 5. Deploy DokployPress mu-plugins — always refresh from image bundle
 # ---------------------------------------------------------------------------
 MU_PLUGINS_DIR="${WP_PATH}/wp-content/mu-plugins"
 mkdir -p "${MU_PLUGINS_DIR}"
@@ -374,12 +374,24 @@ deploy_mu_plugin() {
     echo "[KSM] ✅ ${dest_name} deployed to mu-plugins/."
 }
 
-deploy_mu_plugin "/usr/local/lib/ksm/ksm-migration-fixer.php" "ksm-migration-fixer.php"
-deploy_mu_plugin "/usr/local/lib/ksm/ksm-cache-bootstrap.php" "ksm-cache-bootstrap.php"
+remove_legacy_mu_plugin() {
+    local legacy_name="$1"
+    local legacy_path="${MU_PLUGINS_DIR}/${legacy_name}"
+
+    if [ -f "${legacy_path}" ]; then
+        rm -f "${legacy_path}"
+        echo "[KSM] ✅ Removed legacy mu-plugin ${legacy_name}."
+    fi
+}
+
+deploy_mu_plugin "/usr/local/lib/dokploypress/dokploypress-migration-fixer.php" "dokploypress-migration-fixer.php"
+deploy_mu_plugin "/usr/local/lib/dokploypress/dokploypress-cache-bootstrap.php" "dokploypress-cache-bootstrap.php"
+remove_legacy_mu_plugin "ksm-migration-fixer.php"
+remove_legacy_mu_plugin "ksm-cache-bootstrap.php"
 
 # ---------------------------------------------------------------------------
 # 5a. Auto-detect post-migration state and queue fixer on first HTTP request
-#     Marker is consumed once by ksm-migration-fixer.php.
+#     Marker is consumed once by dokploypress-migration-fixer.php.
 # ---------------------------------------------------------------------------
 MARKER_FILE="${WP_PATH}/ksm-migration-pending.txt"
 

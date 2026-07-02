@@ -1,14 +1,14 @@
 #!/bin/bash
 # =============================================================================
 # build-workflow-regression-test.sh
-# KSM WPDokploystack — Docker image build workflow regression checks
+# DokployPress — Docker image build workflow regression checks
 #
 # Verifies the GitHub Actions build workflow stays parallel and cache-friendly.
 #
 # Usage (from repo root):
 #   bash tests/build-workflow-regression-test.sh
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.14.3
 # =============================================================================
 

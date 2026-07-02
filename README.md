@@ -115,12 +115,12 @@ Use WinSCP/SSH to the VPS (port 22) and browse there. An optional **SFTP contain
 
 ### Stack Naming
 
-After **Create**, Dokploy pre-fills **Environment** with `STACK_SLUG` matching the service ID under the stack name (e.g. `mysite-ksmwpstack-8zv3p5`). That value becomes your Docker volume prefix if you deploy as-is.
+After **Create**, Dokploy pre-fills **Environment** with `STACK_SLUG` matching the service ID under the stack name (e.g. `mysite-dokploypress-8zv3p5`). That value becomes your Docker volume prefix if you deploy as-is.
 
 **Before first Deploy**, replace it with a short name (usually your Dokploy **project** name):
 
 1. **Create** the service from the template — **do not Deploy yet**
-2. Open **Environment** — you will see e.g. `STACK_SLUG=mysite-ksmwpstack-8zv3p5`
+2. Open **Environment** — you will see e.g. `STACK_SLUG=mysite-dokploypress-8zv3p5`
 3. **Replace** with `STACK_SLUG=mysite`
 4. Click **Deploy** (first deploy only — changing `STACK_SLUG` later creates new empty volumes)
 
@@ -129,7 +129,7 @@ Result on the VPS:
 | `STACK_SLUG` | Docker volumes |
 |--------------|----------------|
 | `mysite` (short — recommended) | `mysite_data`, `mysite_db_data`, `mysite_redis_data` |
-| `mysite-ksmwpstack-8zv3p5` (left as-is) | `mysite-ksmwpstack-8zv3p5_data`, etc. |
+| `mysite-dokploypress-8zv3p5` (left as-is) | `mysite-dokploypress-8zv3p5_data`, etc. |
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -197,7 +197,15 @@ Result on the VPS:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WP_MULTISITE_MODE` | `disabled` | WordPress Multisite mode. `disabled` = single-site (default, no change). `subfolder` = sub-sites at `/site1/`. `subdomain` = sub-sites at `site1.yourdomain.com`. See [docs/hosting-guide.md](docs/hosting-guide.md#wordpress-multisite) for the full setup walkthrough. |
-| `WORDPRESS_MULTISITE_CONFIG` | — | Optional WordPress-generated multisite constants. The entrypoint writes them into a managed `wp-config.php` block after running Network Setup. |
+| `WORDPRESS_MULTISITE_CONFIG` | — | Optional WordPress-generated multisite constants. Must be entered as the value of this environment variable, not as standalone `define(...)` environment rows. The entrypoint writes it into a managed `wp-config.php` block after running Network Setup. |
+
+For Dokploy's plain text **Environment** editor, keep the multisite constants on one `KEY=value` line:
+
+```env
+WORDPRESS_MULTISITE_CONFIG=define( 'MULTISITE', true ); define( 'SUBDOMAIN_INSTALL', true ); define( 'DOMAIN_CURRENT_SITE', 'yourdomain.com' ); define( 'PATH_CURRENT_SITE', '/' ); define( 'SITE_ID_CURRENT_SITE', 1 ); define( 'BLOG_ID_CURRENT_SITE', 1 );
+```
+
+If Dokploy shows separate **Name** and **Value** fields, use `WORDPRESS_MULTISITE_CONFIG` as the name and paste the WordPress-generated `define(...)` lines into the value field.
 
 ### Resource Limits (No Rebuild Required)
 
@@ -325,6 +333,14 @@ Redis Object Cache and MilliCache are auto-activated by the stack. During Networ
 1. **Stack 1.14.5+:** Deactivate plugins in **Plugins** — they stay off until `WORDPRESS_MULTISITE_CONFIG` is applied and the network exists.
 2. **Older stack:** Temporarily disable the bootstrap mu-plugin — see [hosting-guide.md](docs/hosting-guide.md#network-setup-plugins-keep-reactivating-stack-before-1145).
 3. Complete Network Setup, add `WORDPRESS_MULTISITE_CONFIG` in Dokploy, redeploy — cache plugins reactivate automatically after the network is live.
+
+### Network Setup says an existing network was detected
+
+This usually means WordPress already created the multisite database tables, but the final constants are not active in `wp-config.php` yet.
+
+1. Keep `WP_MULTISITE_MODE=subdomain` or `WP_MULTISITE_MODE=subfolder` in Dokploy **Environment**.
+2. Add the WordPress-generated constants as the value of `WORDPRESS_MULTISITE_CONFIG`, not as separate bare `define(...)` environment lines.
+3. Redeploy and check WordPress logs for `WORDPRESS_MULTISITE_CONFIG applied to wp-config.php`.
 
 ### WordPress redirects to `https://nginx/wp-login.php`
 

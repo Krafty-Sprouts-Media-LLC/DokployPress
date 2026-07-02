@@ -122,7 +122,7 @@ Optional: publish **additional** `dokploypress-*` images for new installs while 
   - [ ] `meta.json` → `links.github`, `links.docs`
   - [ ] `README.md` → template Base URL, manual compose URL
   - [ ] `docs/hosting-guide.md`, `docs/sftp-setup.md`, file headers with GitHub URLs
-  - [ ] `wordpress/ksm-cache-bootstrap.php` Plugin URI (optional)
+  - [ ] `wordpress/dokploypress-cache-bootstrap.php` Plugin URI (optional)
   - [ ] `.github/workflows/release.yml` release name
 - [ ] Update Dokploy template **Base URL** in README to new `raw.githubusercontent.com/.../DokployPress/main`
 - [ ] Re-tag or note in release notes: "Repo renamed; image paths unchanged"

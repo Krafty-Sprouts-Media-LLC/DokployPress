@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # multisite-regression-test.sh
-# KSM WPDokploystack — Multisite release regression checks
+# DokployPress — Multisite release regression checks
 #
 # Verifies that multisite setup remains configurable through Dokploy environment
 # variables and that migration URL repair cannot learn Docker-internal hosts.
@@ -9,7 +9,7 @@
 # Usage (from repo root):
 #   bash tests/multisite-regression-test.sh
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.14.2
 # =============================================================================
 
@@ -49,10 +49,12 @@ assert_file_contains "${ROOT_DIR}/template.toml" 'WORDPRESS_PUBLIC_URL=https://$
 assert_file_contains "${ROOT_DIR}/wordpress/docker-entrypoint-custom.sh" 'repair_internal_site_url' "Entrypoint repairs internal site URLs"
 assert_file_contains "${ROOT_DIR}/wordpress/docker-entrypoint-custom.sh" 'apply_multisite_config' "Entrypoint applies multisite config env"
 assert_file_contains "${ROOT_DIR}/wordpress/docker-entrypoint-custom.sh" 'BEGIN KSM WORDPRESS_MULTISITE_CONFIG' "Entrypoint writes managed multisite block"
-assert_file_contains "${ROOT_DIR}/wordpress/ksm-migration-fixer.php" 'is_internal_request' "Migration fixer detects internal requests"
-assert_file_contains "${ROOT_DIR}/wordpress/ksm-migration-fixer.php" 'wp_doing_cron' "Migration fixer skips wp-cron requests"
-assert_file_contains "${ROOT_DIR}/wordpress/ksm-cache-bootstrap.php" 'ksm_cache_bootstrap_is_network_setup_pending' "Cache bootstrap pauses during multisite network setup"
+assert_file_contains "${ROOT_DIR}/wordpress/dokploypress-migration-fixer.php" 'is_internal_request' "Migration fixer detects internal requests"
+assert_file_contains "${ROOT_DIR}/wordpress/dokploypress-migration-fixer.php" 'wp_doing_cron' "Migration fixer skips wp-cron requests"
+assert_file_contains "${ROOT_DIR}/wordpress/dokploypress-cache-bootstrap.php" 'dokploypress_cache_bootstrap_is_network_setup_pending' "Cache bootstrap pauses during multisite network setup"
+assert_file_contains "${ROOT_DIR}/wordpress/docker-entrypoint-custom.sh" 'Removed legacy mu-plugin' "Entrypoint removes legacy KSM mu-plugin filenames"
 assert_file_contains "${ROOT_DIR}/docs/hosting-guide.md" 'WORDPRESS_MULTISITE_CONFIG=' "Hosting guide documents multisite config env"
+assert_file_contains "${ROOT_DIR}/docs/hosting-guide.md" 'Do **not** add bare `define(...)` lines as separate environment rows.' "Hosting guide warns against standalone multisite define rows"
 assert_file_contains "${ROOT_DIR}/README.md" 'not affiliated with or endorsed by' "README documents Dokploy affiliation disclaimer"
 assert_file_contains "${ROOT_DIR}/meta.json" 'Not affiliated with or endorsed by Dokploy' "Template description includes affiliation disclaimer"
 

@@ -61,7 +61,7 @@ Click **Deploy** / **Redeploy** in Dokploy.
 
 ## Multisite note
 
-If Network Setup is in progress, ensure `WORDPRESS_MULTISITE_CONFIG` contains your six `define()` lines and `WP_MULTISITE_MODE=subdomain` (or `subfolder`) is still set. See [hosting-guide.md](hosting-guide.md#wordpress-multisite).
+If Network Setup is in progress, ensure `WP_MULTISITE_MODE=subdomain` (or `subfolder`) is still set and that the six WordPress-generated `define(...)` lines are stored inside `WORDPRESS_MULTISITE_CONFIG`. Do not add bare `define(...)` lines as separate Dokploy environment rows. See [hosting-guide.md](hosting-guide.md#wordpress-multisite).
 
 ## Rollback
 

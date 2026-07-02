@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
 # install-plugins.sh
-# KSM WPDokploystack — Cache plugin installer (one-shot sidecar)
+# DokployPress — Cache plugin installer (one-shot sidecar)
 #
 # Downloads and extracts Redis Object Cache and MilliCache into wp-content/plugins.
 # Activation and drop-in setup are handled by the WordPress entrypoint via WP-CLI.
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.8.0
 # =============================================================================
 
@@ -17,7 +17,7 @@ PLUGINS_PATH="${WORDPRESS_PATH}/wp-content/plugins"
 REDIS_PLUGIN_URL="https://downloads.wordpress.org/plugin/redis-cache.latest-stable.zip"
 MILLICACHE_PLUGIN_URL="https://github.com/MilliPress/MilliCache/releases/download/v1.6.2/millicache.zip"
 
-echo "=== KSM Cache Plugin Installer ==="
+echo "=== DokployPress Cache Plugin Installer ==="
 
 # Wait for WordPress to be ready (check for wp-config.php)
 echo "Waiting for WordPress to be ready..."

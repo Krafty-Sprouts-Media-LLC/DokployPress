@@ -1,9 +1,9 @@
 # =============================================================================
-# KSM WPDokploystack — Cache plugin installer image
+# DokployPress — Cache plugin installer image
 #
 # One-shot sidecar that downloads Redis Object Cache and MilliCache plugins.
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.8.0
 # =============================================================================
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: KSM Migration Fixer
+ * Plugin Name: DokployPress Migration Fixer
  * Plugin URI:  https://github.com/Krafty-Sprouts-Media-LLC/DokployPress
  * Description: Must-use plugin for DokployPress. Unofficial WordPress stack for
  *              Dokploy — by Krafty Sprouts Media. Automatically runs
@@ -26,13 +26,13 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * KSM_Migration_Fixer
+ * DokployPress_Migration_Fixer
  *
  * Hooks into WordPress init to detect and handle post-migration state.
  * All actions are gated behind a marker file check so there is zero
  * performance impact on normal (non-migration) requests.
  */
-class KSM_Migration_Fixer {
+class DokployPress_Migration_Fixer {
 
 	/**
 	 * Marker file written by the migration tool (or our entrypoint) to
@@ -51,7 +51,7 @@ class KSM_Migration_Fixer {
 	 * @since 1.0.0
 	 * @var string
 	 */
-	const LOG_FILE = WP_CONTENT_DIR . '/ksm-migration-fixer.log';
+	const LOG_FILE = WP_CONTENT_DIR . '/dokploypress-migration-fixer.log';
 
 	/**
 	 * Stack-native cache plugins — always kept active on this stack.
@@ -190,7 +190,7 @@ class KSM_Migration_Fixer {
 		}
 
 		$log   = array();
-		$log[] = '[' . gmdate( 'Y-m-d H:i:s' ) . '] KSM Migration Fixer — post-migration cleanup started.';
+		$log[] = '[' . gmdate( 'Y-m-d H:i:s' ) . '] DokployPress Migration Fixer — post-migration cleanup started.';
 
 		self::flush_object_cache( $log );
 		self::deactivate_conflicting_cache_plugins( $log );
@@ -213,7 +213,7 @@ class KSM_Migration_Fixer {
 			$log[] = '  ✅ Migration marker removed.';
 		}
 
-		$log[] = '[' . gmdate( 'Y-m-d H:i:s' ) . '] KSM Migration Fixer — cleanup complete.';
+		$log[] = '[' . gmdate( 'Y-m-d H:i:s' ) . '] DokployPress Migration Fixer — cleanup complete.';
 		$log[] = str_repeat( '-', 60 );
 
 		file_put_contents( self::LOG_FILE, implode( PHP_EOL, $log ) . PHP_EOL, FILE_APPEND | LOCK_EX );
@@ -533,4 +533,4 @@ class KSM_Migration_Fixer {
 	}
 }
 
-KSM_Migration_Fixer::init();
+DokployPress_Migration_Fixer::init();

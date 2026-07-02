@@ -4,7 +4,7 @@ name: Stack Smoke Test
 # smoke-test.yml
 # Integration test: full Docker Compose stack + MilliCache verification.
 #
-# @package KSM-WPDokploystack
+# @package DokployPress
 # @since   1.8.0
 # =============================================================================
 
