@@ -1,4 +1,4 @@
-# KSM WordPress Stack
+# KSM WordPress Stack (DokployPress)
 
 Production-ready WordPress deployment stack optimized for Dokploy with Redis object cache, MilliCache full-page caching, Nginx, and management tools.
 
