@@ -8,6 +8,31 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [1.14.0] - 02/07/2026
+
+### Added
+- **WordPress Multisite support** — New `WP_MULTISITE_MODE` environment variable controls multisite mode.
+  Set to `subfolder` (path-based sub-sites) or `subdomain` (subdomain-based sub-sites) to enable Network Setup.
+  Defaults to `disabled` — zero impact on existing single-site deployments.
+- **`WP_ALLOW_MULTISITE` enforcement in entrypoint** — When `WP_MULTISITE_MODE` is `subfolder` or `subdomain`,
+  the custom entrypoint (Step 4a) uses WP-CLI to ensure `WP_ALLOW_MULTISITE=true` is always present in
+  `wp-config.php` on every container start. Idempotent — mirrors the existing `DISABLE_WP_CRON` enforcement.
+  Fixes the "Tools → Network Setup" menu not appearing after manually adding the constant to wp-config.php.
+- **Nginx multisite rewrites** — `nginx/default.conf.template` now includes:
+  - `/wp-admin` trailing-slash redirect (both subfolder and subdomain modes).
+  - Subfolder prefix-strip rewrites (`^(/[^/]+)?(/wp-.*)` and `^(/[^/]+)?(/.*\.php)`) — routes `/site1/wp-admin`, `/site1/wp-login.php`, etc. correctly in subfolder mode.
+  - Legacy `/blogs.dir` and `/files/` upload-path compatibility locations (pre-WP 3.5, no-ops on modern installs).
+  All rules are guarded by `!-e $request_filename` — safe no-ops on single-site installs.
+
+### Changed
+- `docker-compose.yml` — `WP_MULTISITE_MODE` env var added to `wordpress` service (default: `disabled`).
+- `blueprints/ksm-wp-stack/docker-compose.yml` — Same `WP_MULTISITE_MODE` env var added to blueprint.
+- `wordpress/docker-entrypoint-custom.sh` v1.14.0 — Added Step 4a: multisite constant enforcement.
+- `nginx/default.conf.template` — Added multisite rewrite rules and file header comment.
+- `meta.json` — Version bumped `1.13.5` → `1.14.0`.
+
+---
+
 ## [1.13.5] - 19/06/2026
 
 ### Fixed

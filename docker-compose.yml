@@ -1,3 +1,14 @@
+# =============================================================================
+# docker-compose.yml
+# KSM WPDokploystack — Main Docker Compose stack definition
+#
+# Services: nginx, wordpress, db (MariaDB), redis, plugin-installer,
+#           phpmyadmin, wp-cron, sftp (optional, tools profile)
+#
+# @package KSM-WPDokploystack
+# @since   1.0.0
+# =============================================================================
+
 services:
   nginx:
     build:
@@ -56,6 +67,9 @@ services:
       - PHP_OPCACHE_MEMORY=${PHP_OPCACHE_MEMORY:-128}
       - PHP_OPCACHE_MAX_FILES=${PHP_OPCACHE_MAX_FILES:-4000}
       - PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-0}
+      # Multisite — set to 'subfolder' or 'subdomain' to enable Network Setup.
+      # Leave as 'disabled' for standard single-site installs.
+      - WP_MULTISITE_MODE=${WP_MULTISITE_MODE:-disabled}
     volumes:
       - wordpress_data:/var/www/html
     depends_on:

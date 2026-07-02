@@ -12,6 +12,8 @@
 #   4. Enforce DISABLE_WP_CRON=true in wp-config.php via WP-CLI
 #      (WORDPRESS_CONFIG_EXTRA only runs on fresh installs; this ensures
 #       existing installs also get the constant on every container start)
+#   4a. Enforce WP_ALLOW_MULTISITE in wp-config.php when WP_MULTISITE_MODE
+#       is set to 'subfolder' or 'subdomain' — fixes missing Network Setup menu
 #   5. Deploy KSM mu-plugins after core exists (avoids fresh-install wipe by tar extract)
 #   6. Start php-fpm via upstream entrypoint
 #      (Cache plugin activation runs via ksm-cache-bootstrap mu-plugin on first HTTP request.)
@@ -147,6 +149,41 @@ if [ -f "${WP_CONFIG}" ]; then
     else
         echo "[KSM] DISABLE_WP_CRON already present in wp-config.php."
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# 4a. Enforce WP_ALLOW_MULTISITE constant when multisite mode is configured
+#     Controls whether "Tools → Network Setup" appears in WP Admin.
+#     Idempotent — uses WP-CLI, safe to run on every boot.
+#
+#     WP_MULTISITE_MODE values:
+#       disabled  — (default) single-site install, no changes made
+#       subfolder — multisite with path-based sub-sites (/site1, /site2)
+#       subdomain — multisite with subdomain-based sub-sites (site1.domain.com)
+#
+#     NOTE: After "Tools → Network Setup" completes the wizard, WordPress
+#     provides additional constants (MULTISITE, SUBDOMAIN_INSTALL, etc.).
+#     Add those to Dokploy env vars via WORDPRESS_CONFIG_EXTRA and redeploy
+#     — do NOT edit wp-config.php manually (it will be overwritten on restart).
+# ---------------------------------------------------------------------------
+if [ -f "${WP_CONFIG}" ]; then
+    case "${WP_MULTISITE_MODE:-disabled}" in
+        subfolder|subdomain)
+            echo "[KSM] Multisite mode: ${WP_MULTISITE_MODE} — enforcing WP_ALLOW_MULTISITE..."
+            if ! wp config has WP_ALLOW_MULTISITE --path="${WP_PATH}" --allow-root 2>/dev/null; then
+                wp config set WP_ALLOW_MULTISITE true --path="${WP_PATH}" --allow-root --raw
+                echo "[KSM] ✅ WP_ALLOW_MULTISITE set in wp-config.php (Tools → Network Setup now available)."
+            else
+                echo "[KSM] WP_ALLOW_MULTISITE already present in wp-config.php."
+            fi
+            ;;
+        disabled|"")
+            echo "[KSM] Multisite mode: disabled (single-site)."
+            ;;
+        *)
+            echo "[KSM] ⚠️  Unknown WP_MULTISITE_MODE='${WP_MULTISITE_MODE}' — expected: disabled, subfolder, subdomain."
+            ;;
+    esac
 fi
 
 # ---------------------------------------------------------------------------

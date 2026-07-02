@@ -1,3 +1,15 @@
+# =============================================================================
+# default.conf.template
+# KSM WPDokploystack — Nginx site configuration template
+#
+# Processed by envsubst at container startup (NGINX_CLIENT_MAX_BODY_SIZE).
+# Supports single-site and multisite (subfolder + subdomain) WordPress installs.
+# Served behind Traefik reverse proxy; server_name _ accepts all hostnames.
+#
+# @package KSM-WPDokploystack
+# @since   1.0.0
+# =============================================================================
+
 # Detect HTTPS when behind a reverse proxy (Traefik) or Cloudflare Tunnel.
 # X-Forwarded-Proto covers standard reverse-proxy setups; CF-Visitor covers
 # Cloudflare Tunnel cases where the upstream proxy may strip X-Forwarded-Proto.
@@ -62,9 +74,43 @@ server {
         deny all;
     }
 
-    # WordPress permalinks
+    # WordPress permalinks (single-site and multisite subfolder/subdomain)
     location / {
         try_files $uri $uri/ /index.php?$args;
+    }
+
+    # ---------------------------------------------------------------------------
+    # Multisite rewrites — covers both subdomain and subfolder modes.
+    # All three rules are guarded by !-e (file/dir must not exist), so they are
+    # no-ops on single-site installs where real WP core files are present.
+    #
+    #   Line 1: /wp-admin missing trailing slash → redirect (both modes)
+    #   Line 2: /site1/wp-* paths → strip subsite prefix (subfolder mode)
+    #   Line 3: /site1/anything.php → strip subsite prefix (subfolder mode)
+    # ---------------------------------------------------------------------------
+    if (!-e $request_filename) {
+        rewrite /wp-admin$ $scheme://$host$uri/ permanent;
+        rewrite ^(/[^/]+)?(/wp-.*) $2 last;
+        rewrite ^(/[^/]+)?(/.*\.php) $2 last;
+    }
+
+    # ---------------------------------------------------------------------------
+    # Multisite: legacy upload path compatibility (pre-WordPress 3.5 installs).
+    # Modern WP (3.5+) uses wp-content/uploads/sites/N/ — these rules are
+    # no-ops if those paths don't exist.
+    # ---------------------------------------------------------------------------
+    location ^~ /blogs.dir {
+        internal;
+        alias /var/www/html/wp-content/blogs.dir;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ ^/files/(.*)$ {
+        try_files /wp-content/blogs.dir/$blogid/$uri /wp-includes/ms-files.php?file=$1;
+        access_log off;
+        log_not_found off;
+        expires max;
     }
 
     # PHP-FPM configuration
