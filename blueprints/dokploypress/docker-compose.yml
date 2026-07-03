@@ -35,6 +35,14 @@ services:
   wordpress:
     image: ghcr.io/krafty-sprouts-media-llc/dokploypress-wordpress:2.0.2
     pull_policy: always
+    # Forwards every KEY=VALUE set in Dokploy's Environment tab straight into
+    # this container's process env — lets theme/plugin-specific vars (e.g. a
+    # GitHub update-checker token) work via getenv() with no compose edit or
+    # redeploy of this stack's images. required: false so local runs without
+    # a .env file still work.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - WORDPRESS_DB_HOST=db
       - WORDPRESS_DB_USER=wordpress

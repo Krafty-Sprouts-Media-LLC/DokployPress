@@ -10,6 +10,16 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.1.0] - 03/07/2026
+
+### Added
+- `docker-compose.yml` and `blueprints/dokploypress/docker-compose.yml` — `wordpress` service now loads an optional `env_file: .env`, forwarding every variable set in Dokploy's **Environment** tab into the WordPress container's process environment automatically. Theme/plugin-specific variables (e.g. a GitHub release update-checker token) work via `getenv()` immediately after being added in Dokploy — no compose edit or image rebuild needed per integration. (#1)
+
+### Changed
+- `README.md` — Documented the generic Environment-tab passthrough under a new **Custom / Third-Party Environment Variables** section, with a worked example and a verification step.
+
+---
+
 ## [2.0.2] - 02/07/2026
 
 ### Changed

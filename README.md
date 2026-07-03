@@ -236,6 +236,23 @@ If Dokploy shows separate **Name** and **Value** fields, use `WORDPRESS_MULTISIT
 
 When using the optional SFTP container, the WordPress root is `/public_html` in the SFTP client. The VPS Docker volume path under `/var/lib/docker/volumes/.../_data/` is only for direct VPS SSH access.
 
+### Custom / Third-Party Environment Variables
+
+Any variable you add in Dokploy's **Environment** tab is automatically forwarded into the WordPress container's process environment — no `docker-compose.yml` change or image rebuild required. This lets theme- or plugin-specific variables work immediately via PHP's `getenv()`, without this repo needing to allowlist every one individually.
+
+Example — a theme with a GitHub release update-checker that reads its token via `getenv('KS_GITHUB_UPDATE_TOKEN')`:
+
+```env
+KS_GITHUB_UPDATE_TOKEN=github_pat_xxx
+KS_GITHUB_UPDATE_REPO=YourOrg/your-theme
+```
+
+1. Add the variable(s) in Dokploy's **Environment** tab
+2. Redeploy the stack
+3. Verify it reached the container: **Dokploy → wordpress container → Terminal** → `printenv | grep KS_GITHUB_UPDATE_TOKEN` (or `wp theme list` / the plugin's own update-check UI in **Appearance → Themes**)
+
+**Note:** Dokploy's Environment tab is shared across every service in the stack (nginx, wordpress, db, redis, etc.), and every entry is forwarded to the WordPress container specifically. Don't put secrets there that WordPress/PHP code shouldn't be able to read via `getenv()`.
+
 ## Changing Settings After Deployment
 
 All PHP, Nginx, Redis, and resource settings can be changed without rebuilding:

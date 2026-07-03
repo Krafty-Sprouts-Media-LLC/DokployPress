@@ -45,6 +45,14 @@ services:
     build:
       context: ./wordpress
       dockerfile: Dockerfile
+    # Forwards every KEY=VALUE set in Dokploy's Environment tab straight into
+    # this container's process env — lets theme/plugin-specific vars (e.g. a
+    # GitHub update-checker token) work via getenv() with no compose edit or
+    # redeploy of this stack's images. required: false so local/CI runs
+    # without a .env file (see tests/smoke-test.env) still work.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - WORDPRESS_DB_HOST=${WORDPRESS_DB_HOST:-db}
       - WORDPRESS_DB_USER=${WORDPRESS_DB_USER:-wordpress}
