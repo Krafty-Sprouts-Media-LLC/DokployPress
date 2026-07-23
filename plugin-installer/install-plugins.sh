@@ -103,9 +103,11 @@ install_millicache() {
 }
 
 fix_plugin_permissions() {
-	if id www-data >/dev/null 2>&1; then
-		chown -R www-data:www-data "${PLUGINS_PATH}" 2>/dev/null || true
-	fi
+	# Numeric IDs, not the name "www-data": this container (alpine base) has no
+	# www-data user of its own, so `id www-data` always fails here and silently
+	# skips the chown. 33:33 is the www-data UID:GID baked into the official
+	# wordpress:php8.3-fpm image that actually owns and serves these files.
+	chown -R 33:33 "${PLUGINS_PATH}" 2>/dev/null || true
 }
 
 install_plugin_zip "Redis Object Cache" "${REDIS_PLUGIN_URL}" "redis-cache"

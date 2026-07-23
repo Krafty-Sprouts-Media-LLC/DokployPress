@@ -10,6 +10,13 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.1.4] - 23/07/2026
+
+### Fixed
+- **`plugin-installer/install-plugins.sh` — Redis Object Cache and MilliCache installed with root ownership on every site, breaking in-dashboard plugin updates** — `fix_plugin_permissions()` guarded its `chown` behind `if id www-data`, but the plugin-installer's `alpine:3.19` base image has no `www-data` user of its own (confirmed directly: `id www-data` returns "unknown user" on bare `alpine:3.19`). The guard silently failed on every run, so the chown never executed, and every plugin extracted by this sidecar (which runs as root — no `USER` directive in this image) stayed root-owned on the shared volume. The `wordpress` container's own `www-data` (UID 33, from the official `wordpress:php8.3-fpm` image) could then never overwrite those files, so WordPress's self-update ("Update Now" in wp-admin) failed with "The update cannot be installed because some files could not be copied. This is usually due to inconsistent file permissions." on 100% of sites, regardless of MilliCache version. Fixed by chowning to the numeric `33:33` directly — matching the UID:GID the `wordpress` image actually uses (also already the convention this stack uses elsewhere: the optional `sftp` service in `docker-compose.yml` defaults to `SFTP_UID=33` for the same reason) — instead of resolving a username that doesn't exist in this container. `fix_plugin_permissions()` already runs unconditionally on every plugin-installer start, including on redeploys of existing sites, so this self-heals already-affected installs on their next redeploy — no manual `chown` required. Verified directly: full `wp-content/plugins/` tree, recursively, is `www-data:www-data` after a fresh install with this fix.
+
+---
+
 ## [2.1.3] - 23/07/2026
 
 ### Fixed
