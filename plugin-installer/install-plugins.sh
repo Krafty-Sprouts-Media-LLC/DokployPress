@@ -15,7 +15,7 @@ set -e
 WORDPRESS_PATH="/var/www/html"
 PLUGINS_PATH="${WORDPRESS_PATH}/wp-content/plugins"
 REDIS_PLUGIN_URL="https://downloads.wordpress.org/plugin/redis-cache.latest-stable.zip"
-MILLICACHE_PLUGIN_URL="https://github.com/MilliPress/MilliCache/releases/download/v1.7.2/millicache.zip"
+MILLICACHE_PLUGIN_URL="https://github.com/MilliPress/MilliCache/releases/download/v1.7.4/millicache-1.7.4.zip"
 
 echo "=== DokployPress Cache Plugin Installer ==="
 
@@ -83,8 +83,7 @@ install_millicache() {
 		echo "Downloading ${name} (attempt ${attempt}/${max_attempts})..."
 		cd /tmp
 		if curl -fsSL -o millicache.zip "${MILLICACHE_PLUGIN_URL}"; then
-			mkdir -p "${PLUGINS_PATH}/${expected_dir}"
-			unzip -q -o millicache.zip -d "${PLUGINS_PATH}/${expected_dir}/"
+			unzip -q -o millicache.zip -d "${PLUGINS_PATH}/"
 			rm -f millicache.zip
 
 			if [ -f "${PLUGINS_PATH}/${expected_dir}/millicache.php" ]; then

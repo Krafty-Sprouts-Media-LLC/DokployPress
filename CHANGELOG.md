@@ -10,6 +10,16 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.1.3] - 23/07/2026
+
+### Fixed
+- **`plugin-installer/install-plugins.sh` — MilliCache installation failing on every attempt (regression in 2.1.2)** — `2.1.2` bumped the pinned MilliCache release to `v1.7.2`, whose release zip changed packaging: it now ships as a self-contained plugin zip with `millicache/millicache.php` already at its top level (previously the `v1.6.2` zip extracted flat, with no wrapping folder). The installer still extracted into a pre-created `wp-content/plugins/millicache/` directory, which double-nested the new zip's own `millicache/` folder to `wp-content/plugins/millicache/millicache/millicache.php` — verification then failed on all 3 retry attempts and the plugin installer container exited non-zero. Extraction now targets `wp-content/plugins/` directly and trusts the zip's own top-level folder, matching how Redis Object Cache is already installed. Verified by downloading and extracting the actual `v1.7.2` and `v1.7.4` release zips.
+
+### Changed
+- `plugin-installer/install-plugins.sh` — Bumped the pinned MilliCache release from `v1.7.2` to `v1.7.4` (upstream shipped both within the same week). Same caveat as `2.1.2`: this only affects **fresh** deployments — already-provisioned sites need the manual `wp plugin install <zip-url> --force --allow-root` + `wp millicache drop --allow-root` steps (see README) to pick up a newer version.
+
+---
+
 ## [2.1.2] - 16/07/2026
 
 ### Changed
