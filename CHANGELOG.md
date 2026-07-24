@@ -10,6 +10,14 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.2.0] - 24/07/2026
+
+### Added
+- `wordpress/docker-entrypoint-custom.sh` — PHP-FPM pool sizing (`PHP_FPM_PM`, `PHP_FPM_MAX_CHILDREN`, `PHP_FPM_START_SERVERS`, `PHP_FPM_MIN_SPARE_SERVERS`, `PHP_FPM_MAX_SPARE_SERVERS`) is now configurable via environment variables, written to `/usr/local/etc/php-fpm.d/zz-dokploypress-pool.conf` on every container start using the same pattern as the existing PHP/OPcache settings. Defaults match the base `wordpress:php8.3-fpm` image's stock `www.conf` exactly (`pm=dynamic`, `max_children=5`, `start_servers=2`, `min_spare_servers=1`, `max_spare_servers=3`) — installs that don't set these env vars see no behavior change. Previously this was hardcoded at the stock value with no way to raise it without a custom image, which was a common unstated cause of intermittent 502/504 errors and slow responses on higher-traffic or content-heavy sites: once 5 concurrent PHP workers were busy, further requests queued regardless of how much CPU/memory the container had available. Verified: built the image, confirmed the effective `php-fpm -tt` config matches stock when the vars are unset, and confirmed it picks up overridden values when set.
+- `README.md` — New "PHP-FPM Pool Settings" section documenting the above, including a `cgi-fcgi`-based diagnostic command (using the `libfcgi-bin` package already installed for the healthcheck) to check PHP-FPM's live `/status` page for `max children reached`, and a warning that PHP-FPM validates `pm.min_spare_servers ≤ pm.start_servers ≤ pm.max_spare_servers` at startup — raising `PHP_FPM_MAX_CHILDREN` without scaling the spare-server settings proportionally can prevent php-fpm from starting at all.
+
+---
+
 ## [2.1.4] - 23/07/2026
 
 ### Fixed

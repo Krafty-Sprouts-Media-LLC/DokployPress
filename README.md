@@ -165,6 +165,30 @@ Result on the VPS:
 | `PHP_OPCACHE_MAX_FILES` | 4000 | Maximum cached files |
 | `PHP_OPCACHE_VALIDATE` | 0 | Validate timestamps (0=off for production) |
 
+### PHP-FPM Pool Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PHP_FPM_PM` | dynamic | Process manager mode (`dynamic`, `static`, or `ondemand`) |
+| `PHP_FPM_MAX_CHILDREN` | 5 | Maximum concurrent PHP worker processes |
+| `PHP_FPM_START_SERVERS` | 2 | Workers started on boot |
+| `PHP_FPM_MIN_SPARE_SERVERS` | 1 | Minimum idle workers |
+| `PHP_FPM_MAX_SPARE_SERVERS` | 3 | Maximum idle workers |
+
+Defaults match the base `wordpress:php8.3-fpm` image's stock pool exactly — an install that never sets these behaves identically to before this was configurable.
+
+The stock default of 5 concurrent workers is conservative and fine for low-traffic sites, but is a common cause of intermittent 502/504 errors and slow loads on higher-traffic or content-heavy sites: once 5 requests are in flight, everything else queues behind them regardless of how much CPU/memory the container has available — raising `WORDPRESS_MEMORY_LIMIT` alone does **not** fix this.
+
+To check whether you're actually hitting this limit, query PHP-FPM's status page from inside the container (`libfcgi-bin` is preinstalled for this):
+
+```bash
+docker exec <wordpress-container-name> sh -c "SCRIPT_NAME=/status SCRIPT_FILENAME=/status REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000"
+```
+
+A nonzero `max children reached` confirms the pool is the bottleneck. As a starting point, size `PHP_FPM_MAX_CHILDREN` against `WORDPRESS_MEMORY_LIMIT`: roughly `(WORDPRESS_MEMORY_LIMIT × 0.75) / <average MB per worker, ~50-100MB for a typical WordPress site>`, leaving headroom under the container's memory cap.
+
+**PHP-FPM validates `pm.min_spare_servers ≤ pm.start_servers ≤ pm.max_spare_servers` at startup and refuses to start if violated** — when raising `PHP_FPM_MAX_CHILDREN`, scale the spare-server settings proportionally (e.g. `MAX_CHILDREN=20`, `START_SERVERS=4`, `MIN_SPARE_SERVERS=2`, `MAX_SPARE_SERVERS=8`), don't change it in isolation.
+
 ### Nginx Settings
 
 | Variable | Default | Description |

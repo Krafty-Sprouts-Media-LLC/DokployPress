@@ -54,12 +54,31 @@ opcache.fast_shutdown          = 1
 opcache.enable_cli             = 0
 EOF
 
+# PHP-FPM pool sizing — defaults match the base wordpress:php8.3-fpm image's
+# stock www.conf exactly (pm=dynamic, max_children=5, start_servers=2,
+# min/max_spare_servers=1/3), so an install that never sets these env vars
+# behaves identically to before this was configurable. Loads after www.conf
+# (zz- prefix, same convention as the Dockerfile's zz-docker.conf status page)
+# so these values win.
+cat > /usr/local/etc/php-fpm.d/zz-dokploypress-pool.conf << EOF
+; PHP-FPM Pool Settings — Configurable via Environment Variables
+; Generated at container start. Do not edit manually.
+[www]
+pm = ${PHP_FPM_PM:-dynamic}
+pm.max_children = ${PHP_FPM_MAX_CHILDREN:-5}
+pm.start_servers = ${PHP_FPM_START_SERVERS:-2}
+pm.min_spare_servers = ${PHP_FPM_MIN_SPARE_SERVERS:-1}
+pm.max_spare_servers = ${PHP_FPM_MAX_SPARE_SERVERS:-3}
+EOF
+
 echo "[DokployPress] PHP settings configured:"
 echo "  upload_max_filesize : ${PHP_UPLOAD_MAX_FILESIZE:-256M}"
 echo "  post_max_size       : ${PHP_POST_MAX_SIZE:-256M}"
 echo "  memory_limit        : ${PHP_MEMORY_LIMIT:-256M}"
 echo "  max_execution_time  : ${PHP_MAX_EXECUTION_TIME:-300}s"
 echo "  OPcache memory      : ${PHP_OPCACHE_MEMORY:-128}MB"
+echo "  PHP-FPM pm          : ${PHP_FPM_PM:-dynamic}"
+echo "  PHP-FPM max_children: ${PHP_FPM_MAX_CHILDREN:-5}"
 
 WP_PATH="/var/www/html"
 WP_CONFIG="${WP_PATH}/wp-config.php"
