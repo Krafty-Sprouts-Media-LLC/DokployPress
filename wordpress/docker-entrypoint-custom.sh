@@ -15,6 +15,8 @@
 #       existing installs also get the constant on every container start)
 #   4a. Enforce WP_ALLOW_MULTISITE in wp-config.php when WP_MULTISITE_MODE
 #       is set to 'subfolder' or 'subdomain' — fixes missing Network Setup menu
+#   4b. Sync WORDPRESS_CONFIG_EXTRA_PERSISTENT into wp-config.php on every
+#       boot, for plugin/theme constants that must reach existing installs
 #   5. Deploy DokployPress mu-plugins after core exists (avoids fresh-install wipe by tar extract)
 #   6. Start php-fpm via upstream entrypoint
 #      (Cache plugin activation runs via dokploypress-cache-bootstrap mu-plugin on first HTTP request.)
@@ -48,7 +50,7 @@ opcache.enable                 = 1
 opcache.memory_consumption     = ${PHP_OPCACHE_MEMORY:-128}
 opcache.interned_strings_buffer = 8
 opcache.max_accelerated_files  = ${PHP_OPCACHE_MAX_FILES:-4000}
-opcache.validate_timestamps    = ${PHP_OPCACHE_VALIDATE:-0}
+opcache.validate_timestamps    = ${PHP_OPCACHE_VALIDATE:-1}
 opcache.revalidate_freq        = 60
 opcache.fast_shutdown          = 1
 opcache.enable_cli             = 0
@@ -177,26 +179,21 @@ repair_internal_site_url() {
     fi
 }
 
-apply_multisite_config() {
-    if [ ! -f "${WP_CONFIG}" ]; then
-        return 0
-    fi
-
-    local multisite_config="${WORDPRESS_MULTISITE_CONFIG:-}"
-
-    case "${WP_MULTISITE_MODE:-disabled}" in
-        subfolder|subdomain)
-            ;;
-        *)
-            multisite_config=""
-            ;;
-    esac
+# Writes (or removes, if content is empty) a managed, idempotent block of
+# raw PHP into wp-config.php, identified by a marker name. Re-running with
+# the same marker replaces the previous block rather than duplicating it —
+# safe to call on every container start. Shared by apply_multisite_config()
+# and apply_persistent_config_extra() below.
+write_wp_config_block() {
+    local marker="$1"
+    local content="$2"
 
     php -r '
-        $config_file      = $argv[1] ?? "";
-        $multisite_config = trim($argv[2] ?? "");
-        $begin            = "// BEGIN DOKPLOYPRESS WORDPRESS_MULTISITE_CONFIG";
-        $end              = "// END DOKPLOYPRESS WORDPRESS_MULTISITE_CONFIG";
+        $config_file = $argv[1] ?? "";
+        $marker      = $argv[2] ?? "";
+        $content     = trim($argv[3] ?? "");
+        $begin       = "// BEGIN DOKPLOYPRESS " . $marker;
+        $end         = "// END DOKPLOYPRESS " . $marker;
 
         if ( "" === $config_file || ! is_readable( $config_file ) || ! is_writable( $config_file ) ) {
             exit( 1 );
@@ -211,8 +208,8 @@ apply_multisite_config() {
         $pattern  = "/\n?" . preg_quote( $begin, "/" ) . ".*?" . preg_quote( $end, "/" ) . "\n?/s";
         $contents = preg_replace( $pattern, "\n", $contents );
 
-        if ( "" !== $multisite_config ) {
-            $block = $begin . PHP_EOL . $multisite_config . PHP_EOL . $end . PHP_EOL;
+        if ( "" !== $content ) {
+            $block = $begin . PHP_EOL . $content . PHP_EOL . $end . PHP_EOL;
             $stop  = "/* That" . chr( 39 ) . "s all, stop editing! Happy publishing. */";
 
             if ( false !== strpos( $contents, $stop ) ) {
@@ -234,12 +231,54 @@ apply_multisite_config() {
         if ( false === file_put_contents( $config_file, $contents ) ) {
             exit( 1 );
         }
-    ' "${WP_CONFIG}" "${multisite_config}"
+    ' "${WP_CONFIG}" "${marker}" "${content}"
+}
+
+apply_multisite_config() {
+    if [ ! -f "${WP_CONFIG}" ]; then
+        return 0
+    fi
+
+    local multisite_config="${WORDPRESS_MULTISITE_CONFIG:-}"
+
+    case "${WP_MULTISITE_MODE:-disabled}" in
+        subfolder|subdomain)
+            ;;
+        *)
+            multisite_config=""
+            ;;
+    esac
+
+    write_wp_config_block "WORDPRESS_MULTISITE_CONFIG" "${multisite_config}"
 
     if [ -n "${multisite_config}" ]; then
         echo "[DokployPress] ✅ WORDPRESS_MULTISITE_CONFIG applied to wp-config.php."
     else
         echo "[DokployPress] WORDPRESS_MULTISITE_CONFIG not active; managed multisite config block removed if present."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Sync arbitrary plugin/theme wp-config constants from an env var, on every
+# container start — not just fresh installs. WORDPRESS_CONFIG_EXTRA (the
+# base image's own mechanism) only gets written on a fresh volume; a plugin
+# expecting a defined() constant (not getenv()) never receives it on an
+# already-provisioned site otherwise. Same managed-block pattern as
+# WORDPRESS_MULTISITE_CONFIG above, but unconditional — no mode gating.
+# ---------------------------------------------------------------------------
+apply_persistent_config_extra() {
+    if [ ! -f "${WP_CONFIG}" ]; then
+        return 0
+    fi
+
+    local persistent_config="${WORDPRESS_CONFIG_EXTRA_PERSISTENT:-}"
+
+    write_wp_config_block "WORDPRESS_CONFIG_EXTRA_PERSISTENT" "${persistent_config}"
+
+    if [ -n "${persistent_config}" ]; then
+        echo "[DokployPress] ✅ WORDPRESS_CONFIG_EXTRA_PERSISTENT applied to wp-config.php."
+    else
+        echo "[DokployPress] WORDPRESS_CONFIG_EXTRA_PERSISTENT not set; managed persistent config block removed if present."
     fi
 }
 
@@ -372,6 +411,15 @@ if [ -f "${WP_CONFIG}" ]; then
             ;;
     esac
 fi
+
+# ---------------------------------------------------------------------------
+# 4b. Sync WORDPRESS_CONFIG_EXTRA_PERSISTENT into wp-config.php
+#     Lets plugin/theme constants set in Dokploy's Environment tab (e.g. an
+#     encryption key read via defined() rather than getenv()) reach
+#     already-provisioned sites on redeploy — no SSH/WP-CLI needed.
+#     Idempotent — safe to run on every boot.
+# ---------------------------------------------------------------------------
+apply_persistent_config_extra
 
 # ---------------------------------------------------------------------------
 # 5. Deploy DokployPress mu-plugins — always refresh from image bundle

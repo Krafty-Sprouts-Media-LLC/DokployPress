@@ -10,6 +10,18 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [2.3.0] - 08/08/2026
+
+### Fixed
+- **OPcache served stale bytecode after every deploy** — `docker-compose.yml` and `blueprints/dokploypress/docker-compose.yml` set `PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-0}`, which maps to `opcache.validate_timestamps = 0` in `wordpress/docker-entrypoint-custom.sh`. With that setting, OPcache never re-checks file mtimes and keeps serving whatever bytecode it compiled on first request — indefinitely, until PHP-FPM restarts — so plugin/theme code changes did not take visible effect until the next container restart, despite clearing WP-level caches (Redis object cache, MilliCache), which are unrelated to OPcache. Default changed to `PHP_OPCACHE_VALIDATE=1` in both compose files and in the entrypoint's own fallback default, so deployed code changes take effect immediately without relying on the deploy process to restart PHP-FPM. Installs whose deploy process reliably restarts/reloads PHP-FPM after every push can set `PHP_OPCACHE_VALIDATE=0` in Dokploy Environment to recover the (small — validated on a 60s `opcache.revalidate_freq`) perf gain.
+
+### Added
+- `wordpress/docker-entrypoint-custom.sh` — New step 4b, `apply_persistent_config_extra()`, syncs a new `WORDPRESS_CONFIG_EXTRA_PERSISTENT` env var into a managed `wp-config.php` block on every container start, including already-provisioned sites. `WORDPRESS_CONFIG_EXTRA` (the base image's own mechanism) only writes constants on a fresh install, and the existing `env_file: .env` passthrough only reaches PHP via `getenv()` — neither gets an env var set in Dokploy's Environment tab to a plugin/theme constant read via `defined()`/bare-constant access on an existing site. Previously the only way to set such a constant was `wp config set ... --allow-root` run manually inside the container. Refactored the managed-block writer previously private to `apply_multisite_config()` into a shared `write_wp_config_block()` helper (parameterized by marker name and content) used by both functions, rather than duplicating the block-rewrite logic.
+- `docker-compose.yml`, `blueprints/dokploypress/docker-compose.yml` — Forward `WORDPRESS_CONFIG_EXTRA_PERSISTENT` from Dokploy Environment into the container.
+- `README.md`, `docs/hosting-guide.md` — Documented `WORDPRESS_CONFIG_EXTRA_PERSISTENT` and updated the `PHP_OPCACHE_VALIDATE` default/description.
+
+---
+
 ## [2.2.0] - 24/07/2026
 
 ### Added

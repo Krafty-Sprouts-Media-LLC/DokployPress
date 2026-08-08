@@ -163,7 +163,7 @@ Result on the VPS:
 |----------|---------|-------------|
 | `PHP_OPCACHE_MEMORY` | 128 | OPcache memory in MB |
 | `PHP_OPCACHE_MAX_FILES` | 4000 | Maximum cached files |
-| `PHP_OPCACHE_VALIDATE` | 0 | Validate timestamps (0=off for production) |
+| `PHP_OPCACHE_VALIDATE` | 1 | Validate timestamps on every request so deployed code changes take effect immediately. Set to `0` only if your deploy process reliably restarts/reloads PHP-FPM after every code change — otherwise stale bytecode keeps serving until the container restarts. |
 
 ### PHP-FPM Pool Settings
 

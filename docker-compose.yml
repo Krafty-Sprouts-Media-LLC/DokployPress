@@ -60,6 +60,12 @@ services:
       - WORDPRESS_DB_NAME=${WORDPRESS_DB_NAME:-wordpress}
       - WORDPRESS_PUBLIC_URL=${WORDPRESS_PUBLIC_URL:-}
       - WORDPRESS_MULTISITE_CONFIG=${WORDPRESS_MULTISITE_CONFIG:-}
+      # Arbitrary define()/wp-config constants, synced into wp-config.php on
+      # every container start (unlike WORDPRESS_CONFIG_EXTRA below, which
+      # only the base image writes, and only on a fresh install). Use this
+      # for plugin/theme constants (e.g. an encryption key) that must reach
+      # already-provisioned sites without SSH.
+      - WORDPRESS_CONFIG_EXTRA_PERSISTENT=${WORDPRESS_CONFIG_EXTRA_PERSISTENT:-}
       - WORDPRESS_CONFIG_EXTRA=
           define('WP_REDIS_HOST', 'redis');
           define('WP_REDIS_PORT', 6379);
@@ -78,7 +84,7 @@ services:
       # OPcache Settings
       - PHP_OPCACHE_MEMORY=${PHP_OPCACHE_MEMORY:-128}
       - PHP_OPCACHE_MAX_FILES=${PHP_OPCACHE_MAX_FILES:-4000}
-      - PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-0}
+      - PHP_OPCACHE_VALIDATE=${PHP_OPCACHE_VALIDATE:-1}
       # Multisite — set to 'subfolder' or 'subdomain' to enable Network Setup.
       # Leave as 'disabled' for standard single-site installs.
       - WP_MULTISITE_MODE=${WP_MULTISITE_MODE:-disabled}

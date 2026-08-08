@@ -239,7 +239,7 @@ That inner `_data` path is the site root (`wp-admin`, `wp-content`, `wp-includes
 |----------------------------|---------|------------------------------------------|
 | `PHP_OPCACHE_MEMORY`       | `128`   | OPcache memory in MB                     |
 | `PHP_OPCACHE_MAX_FILES`    | `4000`  | Maximum cached files                     |
-| `PHP_OPCACHE_VALIDATE`     | `0`     | Validate timestamps (0=off for production)|
+| `PHP_OPCACHE_VALIDATE`     | `1`     | Validate timestamps on every request so deployed code changes take effect immediately. Set to `0` for a small perf gain on installs that reliably restart/reload PHP-FPM after every deploy — otherwise OPcache keeps serving stale bytecode until the container restarts. |
 
 ### Nginx Settings
 
@@ -272,6 +272,12 @@ That inner `_data` path is the site root (`wp-admin`, `wp-content`, `wp-includes
 |----------------------|------------|-------------------------------------------------------------------------------|
 | `WP_MULTISITE_MODE`  | `disabled` | WordPress Multisite mode. `disabled` = single-site (default). `subfolder` = path-based sub-sites (`/site1`, `/site2`). `subdomain` = subdomain-based sub-sites (`site1.domain.com`). See **WordPress Multisite** section below. |
 | `WORDPRESS_MULTISITE_CONFIG` | — | Optional WordPress-generated multisite constants. Must be entered as the value of this environment variable, not as standalone `define(...)` environment rows. The entrypoint writes it into a managed `wp-config.php` block after running Network Setup. |
+
+### Persistent Plugin/Theme Constants
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WORDPRESS_CONFIG_EXTRA_PERSISTENT` | — | Arbitrary `define(...)` lines (same format as `WORDPRESS_CONFIG_EXTRA`) synced into a managed `wp-config.php` block on **every** container start — including already-provisioned sites. Use this for plugin/theme constants read via `defined()`/bare-constant access rather than `getenv()` (e.g. an encryption key). Setting arbitrary env vars alone in Dokploy's Environment tab only reaches PHP via `getenv()` (see `env_file` above) — it does not become a `define()`'d constant. Unset the variable and redeploy to remove the block. |
 
 ### Resource Limits
 
