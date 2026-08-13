@@ -113,7 +113,7 @@ jobs:
           grep "ghcr.io/krafty-sprouts-media-llc/dokploypress" "${BLUEPRINT}"
 
       - name: Commit updated blueprint image tags
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore: update blueprint image tags to ${{ steps.version.outputs.version }} [skip ci]"
           file_pattern: blueprints/dokploypress/docker-compose.yml
