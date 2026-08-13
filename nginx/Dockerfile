@@ -1,4 +1,4 @@
-FROM nginx:1.30-alpine
+FROM nginx:1.31-alpine
 
 # Install envsubst (part of gettext) and wget for healthcheck
 RUN apk add --no-cache gettext wget
