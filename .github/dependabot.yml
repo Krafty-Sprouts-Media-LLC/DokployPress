@@ -1,0 +1,75 @@
+# =============================================================================
+# dependabot.yml
+# DokployPress — Automated dependency update checks
+#
+# Everything this project pins (Docker image tags, GitHub Actions versions)
+# is pinned deliberately for reproducibility — see IMPLEMENTATION_PLAN.md,
+# Task 1. Pins don't self-update; without something watching for new
+# releases, they just go stale. Dependabot opens a PR when a newer version
+# is available — it does not merge anything automatically.
+#
+# @package DokployPress
+# @since   3.0.0
+# =============================================================================
+
+version: 2
+updates:
+  # Root docker-compose.yml (mariadb, redis, phpmyadmin, alpine, atmoz/sftp)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Mirrored blueprint compose file — see the sync rule in
+  # IMPLEMENTATION_PLAN.md. Third-party image bumps here still need to be
+  # applied by hand to the root docker-compose.yml (or vice versa) to keep
+  # both files identical; Dependabot will flag each independently.
+  - package-ecosystem: "docker"
+    directory: "/blueprints/dokploypress"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # nginx/Dockerfile base image
+  - package-ecosystem: "docker"
+    directory: "/nginx"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # wordpress/Dockerfile base image (build-time artifact URLs — WP-CLI,
+  # php-fpm-healthcheck — are plain curl/wget calls, not something
+  # Dependabot's docker ecosystem tracks; re-check those by hand
+  # periodically per IMPLEMENTATION_PLAN.md, Task 1.2)
+  - package-ecosystem: "docker"
+    directory: "/wordpress"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # plugin-installer/Dockerfile base image
+  - package-ecosystem: "docker"
+    directory: "/plugin-installer"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions used in .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"

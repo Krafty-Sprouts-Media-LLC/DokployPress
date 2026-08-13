@@ -37,7 +37,13 @@ cat > "${PHP_INI_DIR}/custom-settings.ini" << EOF
 ; Generated at container start. Do not edit manually.
 upload_max_filesize = ${PHP_UPLOAD_MAX_FILESIZE:-256M}
 post_max_size       = ${PHP_POST_MAX_SIZE:-256M}
-memory_limit        = ${PHP_MEMORY_LIMIT:-256M}
+; 384M default (1.5x the 256M upload/post default above, not equal to it) —
+; equal values meant a legitimate max-size upload had zero memory headroom
+; left for PHP to actually process it (GD thumbnail generation on a large
+; image needs well above the raw file size). Actual default lives in
+; docker-compose.yml's PHP_MEMORY_LIMIT fallback; this one only matters if
+; the container is ever run without that compose file.
+memory_limit        = ${PHP_MEMORY_LIMIT:-384M}
 max_execution_time  = ${PHP_MAX_EXECUTION_TIME:-300}
 max_input_time      = ${PHP_MAX_INPUT_TIME:-300}
 max_input_vars      = ${PHP_MAX_INPUT_VARS:-3000}
@@ -56,31 +62,45 @@ opcache.fast_shutdown          = 1
 opcache.enable_cli             = 0
 EOF
 
-# PHP-FPM pool sizing — defaults match the base wordpress:php8.3-fpm image's
-# stock www.conf exactly (pm=dynamic, max_children=5, start_servers=2,
-# min/max_spare_servers=1/3), so an install that never sets these env vars
-# behaves identically to before this was configurable. Loads after www.conf
-# (zz- prefix, same convention as the Dockerfile's zz-docker.conf status page)
-# so these values win.
+# PHP-FPM pool sizing — max_children=6 (stock wordpress:php8.3-fpm image's
+# www.conf ships 5) and max_spare_servers=4 (stock 3) are a deliberately
+# modest bump over stock, not a re-tune: 5 concurrent workers is a known,
+# documented cause of intermittent 502/504s even on a single low-traffic
+# site (see README's "PHP-FPM Pool Settings" section). start_servers/
+# min_spare_servers stay at stock's 2/1 — PHP-FPM requires
+# min_spare_servers <= start_servers <= max_spare_servers, which 1/2/4
+# still satisfies.
+#
+# Worst case (all workers simultaneously at the full memory_limit ceiling)
+# is now 6 x 384M = 2.25G against the default WORDPRESS_MEMORY_LIMIT=1G
+# container cap — up from stock's already-nonzero 5 x 256M = 1.28G (see
+# SITE-MEMORY-EXHAUSTION-FIX.md for how that one bit a real site once).
+# This is a *theoretical* ceiling, not typical usage — PHP-FPM workers
+# rarely all peak simultaneously at their full configured limit — and the
+# same tradeoff already existed before this change, just at a smaller
+# ratio. If you raise PHP_FPM_MAX_CHILDREN or PHP_MEMORY_LIMIT further for
+# a specific site, raise WORDPRESS_MEMORY_LIMIT proportionally too (see
+# the sizing formula in README's PHP-FPM Pool Settings section) — don't
+# change one without the other.
 cat > /usr/local/etc/php-fpm.d/zz-dokploypress-pool.conf << EOF
 ; PHP-FPM Pool Settings — Configurable via Environment Variables
 ; Generated at container start. Do not edit manually.
 [www]
 pm = ${PHP_FPM_PM:-dynamic}
-pm.max_children = ${PHP_FPM_MAX_CHILDREN:-5}
+pm.max_children = ${PHP_FPM_MAX_CHILDREN:-6}
 pm.start_servers = ${PHP_FPM_START_SERVERS:-2}
 pm.min_spare_servers = ${PHP_FPM_MIN_SPARE_SERVERS:-1}
-pm.max_spare_servers = ${PHP_FPM_MAX_SPARE_SERVERS:-3}
+pm.max_spare_servers = ${PHP_FPM_MAX_SPARE_SERVERS:-4}
 EOF
 
 echo "[DokployPress] PHP settings configured:"
 echo "  upload_max_filesize : ${PHP_UPLOAD_MAX_FILESIZE:-256M}"
 echo "  post_max_size       : ${PHP_POST_MAX_SIZE:-256M}"
-echo "  memory_limit        : ${PHP_MEMORY_LIMIT:-256M}"
+echo "  memory_limit        : ${PHP_MEMORY_LIMIT:-384M}"
 echo "  max_execution_time  : ${PHP_MAX_EXECUTION_TIME:-300}s"
 echo "  OPcache memory      : ${PHP_OPCACHE_MEMORY:-128}MB"
 echo "  PHP-FPM pm          : ${PHP_FPM_PM:-dynamic}"
-echo "  PHP-FPM max_children: ${PHP_FPM_MAX_CHILDREN:-5}"
+echo "  PHP-FPM max_children: ${PHP_FPM_MAX_CHILDREN:-6}"
 
 WP_PATH="/var/www/html"
 WP_CONFIG="${WP_PATH}/wp-config.php"
@@ -297,6 +317,47 @@ if [ ! -f "${WP_PATH}/wp-includes/version.php" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Whether wp-config.php still has the base image's own
+# `eval(getenv_docker('WORDPRESS_CONFIG_EXTRA', ''))` mechanism intact (see
+# wordpress:php8.3-fpm's wp-config-docker.php). When present, it re-reads
+# WORDPRESS_CONFIG_EXTRA and re-defines WP_CACHE/WP_REDIS_*/MC_STORAGE_*/
+# DISABLE_WP_CRON on every single request — not just on fresh installs, as
+# earlier comments in this file assumed. `wp config has`/`wp config set`
+# can't see constants defined this way (they only parse literal define()
+# text), so code that used them to decide these constants were "missing"
+# would insert a second, literal define() — causing a harmless but
+# permanent "already defined" PHP warning on every request from then on.
+# Only fall back to WP-CLI-based restoration when this mechanism is
+# genuinely gone (e.g. a migration tool replaced wp-config.php wholesale
+# with a file that doesn't have it).
+# ---------------------------------------------------------------------------
+wp_config_extra_intact() {
+    grep -q "getenv_docker('WORDPRESS_CONFIG_EXTRA'" "${WP_CONFIG}" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# One-time self-heal: strip stale literal define() duplicates for constants
+# WORDPRESS_CONFIG_EXTRA's eval() already covers every request (see
+# wp_config_extra_intact() above). Idempotent — no-ops once cleaned up.
+# ---------------------------------------------------------------------------
+remove_redundant_config_extra_duplicates() {
+    if [ ! -f "${WP_CONFIG}" ] || ! wp_config_extra_intact; then
+        return 0
+    fi
+
+    local constant
+    for constant in WP_CACHE WP_REDIS_HOST WP_REDIS_PORT MC_STORAGE_HOST MC_STORAGE_PORT MC_STORAGE_DB DISABLE_WP_CRON; do
+        if wp config has "${constant}" --path="${WP_PATH}" --allow-root --type=constant 2>/dev/null; then
+            if wp config delete "${constant}" --path="${WP_PATH}" --allow-root --type=constant 2>/dev/null; then
+                echo "[DokployPress] ✅ Removed redundant literal ${constant} define() (WORDPRESS_CONFIG_EXTRA already sets it every request)."
+            fi
+        fi
+    done
+}
+
+remove_redundant_config_extra_duplicates
+
+# ---------------------------------------------------------------------------
 # 3. wp-config.php migration auto-fix (Layer 1)
 #    Runs every container start. Safe to run repeatedly — only acts when
 #    values are actually wrong. Fixes DB connection and Redis config so
@@ -304,8 +365,16 @@ fi
 #    overwritten wp-config.php with the source host's settings.
 # ---------------------------------------------------------------------------
 if [ -f "${WP_CONFIG}" ]; then
-    # Read the DB_HOST currently written in wp-config.php
-    CURRENT_DB_HOST=$(grep -oP "(?<=DB_HOST', ')[^']+" "${WP_CONFIG}" 2>/dev/null || echo "")
+    # Read the DB_HOST currently written in wp-config.php. The leading `'`
+    # in the lookbehind is required — without it, "DB_HOST', '" also matches
+    # as a bare substring inside the base image's pristine, unmodified line
+    # `getenv_docker('WORDPRESS_DB_HOST', 'mysql')`, spuriously capturing
+    # "mysql" (the getenv_docker() fallback default) as a false DB_HOST
+    # value on every site's first restart, before this file's DB_HOST line
+    # has ever been converted to a literal `wp config set` value. With the
+    # leading quote required, this only matches the literal single-quoted
+    # form `wp config set` actually produces, e.g. `define( 'DB_HOST', 'db' )`.
+    CURRENT_DB_HOST=$(grep -oP "(?<='DB_HOST', ')[^']+" "${WP_CONFIG}" 2>/dev/null || echo "")
 
     if [ -n "${CURRENT_DB_HOST}" ] && [ "${CURRENT_DB_HOST}" != "${EXPECTED_DB_HOST}" ]; then
         echo ""
@@ -319,18 +388,23 @@ if [ -f "${WP_CONFIG}" ]; then
         wp config set DB_PASSWORD "${WORDPRESS_DB_PASSWORD}"             --path="${WP_PATH}" --allow-root
         wp config set DB_NAME     "${EXPECTED_DB_NAME}"                  --path="${WP_PATH}" --allow-root
 
-        # Restore cache constants only if a migration tool removed them.
-        # WORDPRESS_CONFIG_EXTRA already injects these on normal boots — avoid duplicate define().
-        for constant in WP_CACHE:true:raw WP_REDIS_HOST:redis WP_REDIS_PORT:6379 MC_STORAGE_HOST:redis MC_STORAGE_PORT:6379 MC_STORAGE_DB:1:raw; do
-            IFS=':' read -r name value flags <<< "${constant}"
-            if ! wp config has "${name}" --path="${WP_PATH}" --allow-root 2>/dev/null; then
-                if [ "${flags}" = "raw" ]; then
-                    wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root --raw
-                else
-                    wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root
+        # Restore cache constants only if a migration tool removed the
+        # WORDPRESS_CONFIG_EXTRA eval() mechanism entirely (full wp-config.php
+        # replacement). If that mechanism is still present, these constants
+        # are already re-defined by it on every request — inserting literal
+        # define()s here would just duplicate them (see wp_config_extra_intact()).
+        if ! wp_config_extra_intact; then
+            for constant in WP_CACHE:true:raw WP_REDIS_HOST:redis WP_REDIS_PORT:6379 MC_STORAGE_HOST:redis MC_STORAGE_PORT:6379 MC_STORAGE_DB:1:raw; do
+                IFS=':' read -r name value flags <<< "${constant}"
+                if ! wp config has "${name}" --path="${WP_PATH}" --allow-root 2>/dev/null; then
+                    if [ "${flags}" = "raw" ]; then
+                        wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root --raw
+                    else
+                        wp config set "${name}" "${value}" --path="${WP_PATH}" --allow-root
+                    fi
                 fi
-            fi
-        done
+            done
+        fi
 
         echo "[DokployPress] ✅ wp-config.php corrected successfully."
         echo ""
@@ -360,13 +434,17 @@ repair_internal_site_url
 
 # ---------------------------------------------------------------------------
 # 4. Enforce DISABLE_WP_CRON constant in wp-config.php
-#    WORDPRESS_CONFIG_EXTRA only writes constants on a fresh install.
-#    To guarantee DISABLE_WP_CRON=true on all installs (new and existing),
-#    we set it explicitly via WP-CLI on every container start.
+#    WORDPRESS_CONFIG_EXTRA's eval() mechanism re-defines this on every
+#    request as long as it's intact (see wp_config_extra_intact() above) —
+#    that covers new and existing installs alike. Only fall back to a
+#    literal WP-CLI define() when that mechanism is genuinely gone (e.g. a
+#    migration tool replaced wp-config.php wholesale).
 #    Idempotent — safe to run on every boot.
 # ---------------------------------------------------------------------------
 if [ -f "${WP_CONFIG}" ]; then
-    if ! wp config has DISABLE_WP_CRON --path="${WP_PATH}" --allow-root 2>/dev/null; then
+    if wp_config_extra_intact; then
+        echo "[DokployPress] DISABLE_WP_CRON covered by WORDPRESS_CONFIG_EXTRA every request; no literal define() needed."
+    elif ! wp config has DISABLE_WP_CRON --path="${WP_PATH}" --allow-root 2>/dev/null; then
         wp config set DISABLE_WP_CRON true --path="${WP_PATH}" --allow-root --raw
         echo "[DokployPress] ✅ DISABLE_WP_CRON set in wp-config.php (WP-Cron sidecar manages scheduling)."
     else

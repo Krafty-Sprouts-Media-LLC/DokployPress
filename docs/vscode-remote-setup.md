@@ -90,3 +90,11 @@ Then navigate to `/var/www/html` to view/edit files.
 
 - Ensure your user is in the docker group: `sudo usermod -aG docker $USER`
 - Or connect as root
+
+---
+
+## Related Documentation
+
+- [Main README](../README.md) — deploying and configuring the stack
+- [Advanced Guide](./hosting-guide.md) — deeper operational topics
+- [SFTP Setup](./sftp-setup.md) — the alternative file-access method

@@ -58,8 +58,8 @@ assert_file_contains "${ROOT_DIR}/docker-compose.yml" 'WORDPRESS_CONFIG_EXTRA_PE
 assert_file_contains "${ROOT_DIR}/blueprints/dokploypress/docker-compose.yml" 'WORDPRESS_CONFIG_EXTRA_PERSISTENT=${WORDPRESS_CONFIG_EXTRA_PERSISTENT:-}' "Blueprint compose exposes persistent config extra env"
 assert_file_contains "${ROOT_DIR}/wordpress/docker-entrypoint-custom.sh" 'apply_persistent_config_extra' "Entrypoint applies persistent config extra env"
 assert_file_contains "${ROOT_DIR}/wordpress/docker-entrypoint-custom.sh" 'write_wp_config_block "WORDPRESS_CONFIG_EXTRA_PERSISTENT"' "Entrypoint writes managed persistent config block"
-assert_file_contains "${ROOT_DIR}/docs/hosting-guide.md" 'WORDPRESS_CONFIG_EXTRA_PERSISTENT' "Hosting guide documents persistent config extra env"
-assert_file_contains "${ROOT_DIR}/docs/hosting-guide.md" 'Do **not** add bare `define(...)` lines as separate environment rows.' "Hosting guide warns against standalone multisite define rows"
+assert_file_contains "${ROOT_DIR}/README.md" 'WORDPRESS_CONFIG_EXTRA_PERSISTENT' "README documents persistent config extra env"
+assert_file_contains "${ROOT_DIR}/docs/hosting-guide.md" 'as separate bare `define(...)` environment rows' "Hosting guide warns against standalone multisite define rows"
 assert_file_contains "${ROOT_DIR}/README.md" 'not affiliated with or endorsed by' "README documents Dokploy affiliation disclaimer"
 assert_file_contains "${ROOT_DIR}/meta.json" 'Not affiliated with or endorsed by Dokploy' "Template description includes affiliation disclaimer"
 

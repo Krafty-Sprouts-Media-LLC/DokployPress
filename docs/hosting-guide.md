@@ -1,602 +1,77 @@
-# Easily Host WordPress Sites Using Dokploy with Redis and Nginx
+# DokployPress — Advanced Guide
 
-> **DokployPress:** Unofficial WordPress stack for Dokploy — by Krafty Sprouts Media. **Not affiliated with or endorsed by Dokploy.**
+> **Start here first if you haven't already:** the [main README](../README.md) covers deploying the stack, every configuration variable, common tasks, and everyday troubleshooting. This guide is the companion to it — deeper material on specific topics that most people won't need day-to-day, kept separate so the README stays short enough to actually read.
 
-> **Original Article:** [Easily Host WordPress Sites Using Dokploy with Redis and Nginx](https://itsmereal.com/easily-host-wordpress-sites-using-dokploy-with-redis-and-nginx/)
-> **Original Author:** Al-Mamun Talukder ([@almamunreal](https://twitter.com/almamunreal)) — Full-Stack Developer, Minimalist Designer, Tech Enthusiast. Founder of [Omnixima](https://itsmereal.com).
-> **Published:** December 19, 2025 | **Adapted for DokployPress**
+> **DokployPress** is an independent project by Krafty Sprouts Media LLC, adapted from Al-Mamun Talukder's [original article](https://itsmereal.com/easily-host-wordpress-sites-using-dokploy-with-redis-and-nginx/) on hosting WordPress on Dokploy. **Not affiliated with or endorsed by Dokploy.**
 
----
+## Contents
 
-## Introduction
-
-This guide is adapted from Al-Mamun Talukder's excellent article on hosting WordPress on Dokploy. The original author switched from Coolify (a Docker-based server management tool) to Dokploy, and to replicate the same production performance — featuring Redis caching, Nginx reverse proxying, and PHP-FPM — he created a custom Docker Compose stack specifically optimized for Dokploy.
-
-This documentation captures those steps and supplements them with additional details for **DokployPress** deployments.
-
-DokployPress is maintained by Krafty Sprouts Media LLC and is **not affiliated with or endorsed by Dokploy**.
-
----
-
-## What Is Dokploy?
-
-Dokploy is an open-source PaaS (Platform as a Service) solution that simplifies deploying and managing Docker-based applications on your own VPS. It supports Docker Compose services, provides a web dashboard, handles domains and SSL, and integrates with GitHub for automated deployments.
+- [Installing Dokploy itself](#installing-dokploy-itself)
+- [MariaDB & phpMyAdmin — internals and root access](#mariadb--phpmyadmin--internals-and-root-access)
+- [Upgrading the database (MariaDB 10.6 → 11.8)](#upgrading-the-database-mariadb-106--118)
+- [Renaming the stack — will it break updates?](#renaming-the-stack-in-dokploy--will-it-break-updates)
+- [Fresh install: plugins/mu-plugins not showing?](#fresh-install-pluginsmu-plugins-not-showing)
+- [Migrating an existing WordPress site onto this stack](#migrating-wordpress-sites-from-local-disk)
+- [How MilliCache full-page caching works](#millicache-full-page-caching-built-in)
+- [How the WP-Cron sidecar works](#wp-cron--reliable-scheduled-tasks)
+- [WordPress Multisite — full setup walkthrough](#wordpress-multisite)
+- [How updates reach an existing deployment](#how-updates-reach-an-existing-deployment)
 
 ---
 
-## Step 1 — Setting Up Dokploy
+## Installing Dokploy itself
 
-If Dokploy is not yet installed on your VPS, run the following command as root or a user with `sudo` access:
+If you don't have Dokploy running on a server yet (this is about the Dokploy platform, not this stack):
 
 ```bash
 curl -sSL https://dokploy.com/install.sh | sh
 ```
 
-> **Note:** Make sure the VPS is freshly provisioned for best results. Mixed installations (existing Docker, Nginx, etc.) can cause conflicts.
+Run as root or a user with `sudo` access, on a **freshly provisioned** VPS — mixed installations (existing Docker, Nginx, etc. already on the box) can conflict with what the installer sets up.
 
-After the script finishes, open your browser and navigate to:
+Once it finishes, open `http://<your-vps-ip>:3000` in a browser to create your admin account.
 
-```
-http://<your-vps-ip>:3000
-```
+- Official install docs: https://docs.dokploy.com/docs/core/installation
+- Setup walkthrough video: https://www.youtube.com/watch?v=_FErnBwMpj8 (initial config, SSL, custom domain for the dashboard itself)
 
-This opens the Dokploy setup page where you can create the administrative account.
-
-### Useful References
-
-- **Official Dokploy Installation Docs:** https://docs.dokploy.com/docs/core/installation
-- **YouTube Setup Guide:** https://www.youtube.com/watch?v=_FErnBwMpj8 — Covers initial Dokploy configuration, enabling SSL, and setting up a custom domain for the Dokploy dashboard itself.
+Once Dokploy is running, go to the [main README](../README.md) to deploy this stack.
 
 ---
 
-## Step 2 — Understanding the WordPress Stack
+## MariaDB & phpMyAdmin — internals and root access
 
-Rather than using Dokploy's built-in official WordPress template (which can surface issues in long-term use), this stack uses a production-ready, custom Docker Compose configuration.
+> MariaDB isn't something you install separately — it's already bundled into this stack as the `db` service, and starts automatically with everything else. phpMyAdmin is opt-in (`COMPOSE_PROFILES=tools`, see the README) — turning it on is covered there; this section is what's underneath it.
 
-### Stack Components
+### How the services actually talk to each other
 
-| Service            | Description                                              |
-|--------------------|----------------------------------------------------------|
-| **WordPress**      | PHP 8.3 FPM with Redis extension, OPcache, and WP-CLI  |
-| **Nginx**          | Optimized reverse proxy with caching and security headers|
-| **MariaDB 10.6**   | Database server with health checks                       |
-| **Redis**          | Shared Redis for object cache (DB 0) and MilliCache full-page cache (DB 1) |
-| **phpMyAdmin**     | Database administration interface                        |
-| **Plugin Installer** | Automatically installs Redis Object Cache and MilliCache |
-| **WP-Cron**        | Alpine sidecar that triggers `wp-cron.php` every 5 min via the internal Docker network. Eliminates reliance on visitor traffic for scheduled tasks. |
-| **SFTP** (optional) | Separate SFTP container — enable with `COMPOSE_PROFILES=tools` |
-
-The stack is available at: **https://github.com/Krafty-Sprouts-Media-LLC/DokployPress**
-
----
-
-## Step 3 — Deploying WordPress on Dokploy
-
-### Option A: One-Click Template Deploy (Recommended)
-
-1. In the Dokploy dashboard, navigate to **Projects**.
-2. Create a new Project or open an existing one.
-3. Click **Create Service**.
-4. Choose **Template**.
-5. Set the **Base URL** to:
-   ```
-   https://raw.githubusercontent.com/Krafty-Sprouts-Media-LLC/DokployPress/main
-   ```
-6. Find and select **"DokployPress"**.
-7. Click **Create** and then **Confirm**.
-8. Open **Environment** — `STACK_SLUG` is already set to the service ID under the stack name (e.g. `mysite-dokploypress-8zv3p5`, same string as on the **General** tab). **Before first Deploy**, replace it with your short project name (e.g. `STACK_SLUG=mysite`) so host volumes are `mysite_data`, `mysite_db_data`, `mysite_redis_data`.
-9. Click **Deploy** once ready.
-
-### Option B: Manual Compose Deploy (GitHub)
-
-1. Create a new **Compose** service in Dokploy.
-2. **Provider → GitHub** → Repository: `DokployPress` → Branch: `main`
-3. Set **Compose Path** to:
-   ```
-   ./blueprints/dokploypress/docker-compose.yml
-   ```
-   This blueprint pulls pre-built `dokploypress-*` images from GHCR. The root `./docker-compose.yml` builds on the server and is for local development.
-4. Go to the **Environment** tab and add:
-   ```env
-   STACK_SLUG=your-short-name
-   MYSQL_ROOT_PASSWORD=YourSecureRootPass123!
-   MYSQL_PASSWORD=YourSecureDbPass456!
-   WORDPRESS_DB_PASSWORD=YourSecureDbPass456!
-   ```
-   Set `STACK_SLUG` to a short identifier (e.g. `mysite`) **before the first deploy**.
-5. Click **Deploy**.
-
----
-
-## Step 4 — Post-Deploy Configuration
-
-These steps apply after either deployment option.
-
-### 4a. Configure Domains
-
-Go to the **Domains** tab in your Compose service and add:
-
-| Domain                        | Service     | Port |
-|-------------------------------|-------------|------|
-| `yourdomain.com`              | nginx       | 80   |
-| `pma.yourdomain.com` (optional) | phpmyadmin | 80  |
-
-After adding domains, return to the **General** tab and click **Reload**.
-
-> SSL is handled automatically by Dokploy via Let's Encrypt once the domain is pointed correctly.
-
-**phpMyAdmin credentials:**
-
-| Username    | Password              |
-|-------------|-----------------------|
-| `wordpress` | Your `MYSQL_PASSWORD` |
-
-### 4b. Caching (Automatic)
-
-After you complete the WordPress setup wizard on a new site, the stack handles caching for you:
-
-1. **Plugin Installer** downloads Redis Object Cache and MilliCache into `wp-content/plugins`.
-2. The **cache-bootstrap mu-plugin** activates both plugins and enables their drop-ins on the first front-end page load after WordPress is installed.
-
-No manual activation in wp-admin is required. To verify:
-
-```bash
-docker exec -it <wordpress-container-name> bash
-wp redis status
-wp millicache status
-wp millicache test
-```
-
-| Layer | Plugin | Redis DB | What it caches |
-|-------|--------|----------|----------------|
-| Object cache | Redis Object Cache | 0 | DB queries and PHP objects |
-| Full-page cache | MilliCache | 1 | Complete rendered HTML pages |
-
-Both layers use the same `redis` container. MilliCache connects via `MC_STORAGE_HOST=redis` (Docker internal DNS). **No Nginx changes are required** — MilliCache uses WordPress's `advanced-cache.php` drop-in, not Nginx FastCGI cache.
-
-### 4c. Fresh install — plugins and mu-plugins not showing?
-
-On a **new** site you should see:
-
-| Location | What |
-|----------|------|
-| **Plugins** | Redis Object Cache + MilliCache (inactive until bootstrap runs) |
-| **Plugins → Must-Use** (bottom of screen) | DokployPress Cache Bootstrap + DokployPress Migration Fixer |
-
-**Plugins stay inactive until the first front-end page load** (not wp-admin only). Visit your site homepage while logged out, then refresh **Plugins**.
-
-If MilliCache is missing or mu-plugins are absent:
-
-1. In Dokploy → **Logs** → open **plugin-installer** — confirm both plugins downloaded without errors.
-2. **Redeploy** the stack (pulls fixed images from v1.8.7+). A WordPress container restart deploys mu-plugins into the volume.
-3. Or fix manually via SSH:
-
-```bash
-docker exec -it <wordpress-container-name> bash
-ls wp-content/plugins/millicache/millicache.php
-ls wp-content/mu-plugins/
-wp plugin activate redis-cache millicache --allow-root
-wp redis enable --allow-root
-wp millicache drop --allow-root
-```
-
----
-
-## Environment Variable Reference
-
-### Stack Naming
-
-On template **Create**, Dokploy pre-fills **Environment** with `STACK_SLUG` equal to the service ID shown under the stack name on the **General** tab (e.g. `mysite-dokploypress-8zv3p5`). There is no separate wizard field — check **Environment** after create.
-
-**Replace before first Deploy** (recommended):
-
-1. **Create** the service — **do not Deploy yet**
-2. Open **Environment** — note the pre-filled value, e.g. `STACK_SLUG=mysite-dokploypress-8zv3p5`
-3. **Replace** with your short project slug, e.g. `STACK_SLUG=mysite`
-4. Click **Deploy** (first deploy only)
-
-| Variable      | Default                                      | Description |
-|---------------|----------------------------------------------|-------------|
-| `STACK_SLUG`  | Pre-filled service ID (template). Manual compose: `COMPOSE_PROJECT_NAME` if unset | Volume prefix: `{STACK_SLUG}_data`, `{STACK_SLUG}_db_data`, `{STACK_SLUG}_redis_data`. |
-
-> **Important:** Changing `STACK_SLUG` after the first deploy does **not** rename existing volumes. Docker creates new empty volumes under the new name. Your site data remains in the old volumes until you migrate manually.
-
-On the VPS (WinSCP/SSH), you will see volume **folders** like `/var/lib/docker/volumes/mysite_data/`. WordPress files are in the **`_data` subfolder** inside that volume:
-
-```
-/var/lib/docker/volumes/mysite_data/_data/
-```
-
-That inner `_data` path is the site root (`wp-admin`, `wp-content`, `wp-includes`). Do not edit files only at `/var/lib/docker/volumes/mysite_data/` without the `_data` suffix.
-
-### Database Configuration
-
-| Variable                  | Default     | Description                      |
-|---------------------------|-------------|----------------------------------|
-| `MYSQL_ROOT_PASSWORD`     | —           | **Required.** MariaDB root password |
-| `MYSQL_DATABASE`          | `wordpress` | Database name                    |
-| `MYSQL_USER`              | `wordpress` | Database user                    |
-| `MYSQL_PASSWORD`          | —           | **Required.** Database password  |
-| `WORDPRESS_DB_HOST`       | `db`        | Database host                    |
-| `WORDPRESS_DB_USER`       | `wordpress` | WordPress database user          |
-| `WORDPRESS_DB_PASSWORD`   | —           | **Required.** WordPress DB password |
-| `WORDPRESS_DB_NAME`       | `wordpress` | WordPress database name          |
-
-### PHP Settings
-
-| Variable                      | Default | Description                    |
-|-------------------------------|---------|--------------------------------|
-| `PHP_UPLOAD_MAX_FILESIZE`     | `256M`  | Maximum upload file size       |
-| `PHP_POST_MAX_SIZE`           | `256M`  | Maximum POST data size         |
-| `PHP_MEMORY_LIMIT`            | `256M`  | PHP memory limit               |
-| `PHP_MAX_EXECUTION_TIME`      | `300`   | Script timeout in seconds      |
-| `PHP_MAX_INPUT_TIME`          | `300`   | Input parsing timeout          |
-| `PHP_MAX_INPUT_VARS`          | `3000`  | Maximum input variables        |
-
-### OPcache Settings
-
-| Variable                   | Default | Description                              |
-|----------------------------|---------|------------------------------------------|
-| `PHP_OPCACHE_MEMORY`       | `128`   | OPcache memory in MB                     |
-| `PHP_OPCACHE_MAX_FILES`    | `4000`  | Maximum cached files                     |
-| `PHP_OPCACHE_VALIDATE`     | `1`     | Validate timestamps on every request so deployed code changes take effect immediately. Set to `0` for a small perf gain on installs that reliably restart/reload PHP-FPM after every deploy — otherwise OPcache keeps serving stale bytecode until the container restarts. |
-
-### Nginx Settings
-
-| Variable                     | Default | Description                  |
-|------------------------------|---------|------------------------------|
-| `NGINX_CLIENT_MAX_BODY_SIZE` | `256M`  | Maximum upload size in Nginx |
-
-### Redis Settings
-
-| Variable                  | Default         | Description          |
-|---------------------------|-----------------|----------------------|
-| `REDIS_MAXMEMORY`         | `512mb`         | Redis maximum memory |
-| `REDIS_MAXMEMORY_POLICY`  | `allkeys-lru`   | Eviction policy      |
-
-### WordPress Settings
-
-| Variable               | Default | Description |
-|------------------------|---------|-------------|
-| `WORDPRESS_PUBLIC_URL` | —       | Public site URL, e.g. `https://yourdomain.com`. Dokploy blueprints set this automatically from the main domain. Used to repair `siteurl`/`home` if they were accidentally set to a Docker-internal host such as `nginx`. |
-
-### WP-Cron Settings
-
-| Variable           | Default | Description                                                                 |
-|--------------------|---------|-----------------------------------------------------------------------------|
-| `WP_CRON_INTERVAL` | `300`   | Seconds between each `wp-cron.php` trigger. Lower = more frequent; default is 5 minutes. |
-
-### Multisite Settings
-
-| Variable             | Default    | Description                                                                   |
-|----------------------|------------|-------------------------------------------------------------------------------|
-| `WP_MULTISITE_MODE`  | `disabled` | WordPress Multisite mode. `disabled` = single-site (default). `subfolder` = path-based sub-sites (`/site1`, `/site2`). `subdomain` = subdomain-based sub-sites (`site1.domain.com`). See **WordPress Multisite** section below. |
-| `WORDPRESS_MULTISITE_CONFIG` | — | Optional WordPress-generated multisite constants. Must be entered as the value of this environment variable, not as standalone `define(...)` environment rows. The entrypoint writes it into a managed `wp-config.php` block after running Network Setup. |
-
-### Persistent Plugin/Theme Constants
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WORDPRESS_CONFIG_EXTRA_PERSISTENT` | — | Arbitrary `define(...)` lines (same format as `WORDPRESS_CONFIG_EXTRA`) synced into a managed `wp-config.php` block on **every** container start — including already-provisioned sites. Use this for plugin/theme constants read via `defined()`/bare-constant access rather than `getenv()` (e.g. an encryption key). Setting arbitrary env vars alone in Dokploy's Environment tab only reaches PHP via `getenv()` (see `env_file` above) — it does not become a `define()`'d constant. Unset the variable and redeploy to remove the block. |
-
-### Resource Limits
-
-| Variable                  | Default | Description               |
-|---------------------------|---------|---------------------------|
-| `NGINX_CPU_LIMIT`         | `0.5`   | Nginx CPU limit            |
-| `NGINX_MEMORY_LIMIT`      | `256M`  | Nginx memory limit         |
-| `WORDPRESS_CPU_LIMIT`     | `1.0`   | WordPress CPU limit        |
-| `WORDPRESS_MEMORY_LIMIT`  | `1G`    | WordPress memory limit     |
-| `DB_CPU_LIMIT`            | `1.0`   | MariaDB CPU limit          |
-| `DB_MEMORY_LIMIT`         | `1G`    | MariaDB memory limit       |
-| `REDIS_CPU_LIMIT`         | `0.5`   | Redis CPU limit            |
-| `REDIS_MEMORY_LIMIT`      | `512M`  | Redis memory limit         |
-| `PHPMYADMIN_CPU_LIMIT`    | `0.5`   | phpMyAdmin CPU limit       |
-| `PHPMYADMIN_MEMORY_LIMIT` | `256M`  | phpMyAdmin memory limit    |
-
----
-
-## Updating the Stack
-
-### What a New Version Means
-
-When this repo releases a new version (e.g., `1.4.0` → `1.6.0`), the changes typically fall into one of three categories:
-
-| Change type | Example | Auto-applied on Redeploy? |
-|---|---|---|
-| Docker image update | Nginx config change, PHP version bump | ✅ Yes — `:latest` is pulled |
-| Compose file change | New service, new env var | ⚠️ Depends on deploy method |
-| Docs/template only | Guide updates, meta.json version | ✅ No container change needed |
-
----
-
-### How Image Updates Work
-
-#### Custom stack images (nginx, WordPress, plugin-installer)
-
-Published to GHCR as `:latest`. When GitHub Actions builds a new release, **Redeploy** in Dokploy pulls the new image for these three services automatically.
-
-| Service | Image | How to update |
-|---------|-------|---------------|
-| **nginx** | `ghcr.io/krafty-sprouts-media-llc/dokploypress-nginx:latest` | **Redeploy** — pulls latest GHCR build |
-| **wordpress** (PHP-FPM) | `ghcr.io/krafty-sprouts-media-llc/dokploypress-wordpress:latest` | **Redeploy** — pulls latest (PHP version bumps ship in this image) |
-| **plugin-installer** | `ghcr.io/krafty-sprouts-media-llc/dokploypress-plugin-installer:latest` | **Redeploy** — one-shot sidecar re-runs if plugins missing |
-
-#### Third-party images (MariaDB, Redis, phpMyAdmin, optional SFTP)
-
-| Service | Image | How to update |
-|---------|-------|---------------|
-| **MariaDB** | `mariadb:10.6` (pinned) | Edit the `image:` tag in the **Compose** tab (e.g. `mariadb:10.11`), back up the database first, then **Redeploy**. Major MariaDB jumps need a planned migration — not just a tag change. |
-| **Redis** | `redis:alpine` | **Redeploy** pulls the current Alpine build. Pin a version (e.g. `redis:7-alpine`) in Compose if you want reproducible updates. |
-| **phpMyAdmin** | `phpmyadmin/phpmyadmin:latest` | **Redeploy** pulls latest. Pin a version in Compose for stricter control. |
-| **SFTP** (optional) | `atmoz/sftp:latest` | **Redeploy** when `COMPOSE_PROFILES=tools` is enabled. |
-
-> **Option A (template):** Dokploy stores a compose **snapshot** at create time. To change a pinned tag (e.g. MariaDB `10.6` → `10.11`), edit the **Compose** tab manually, then Redeploy. Image `:latest` services still update on Redeploy without compose edits.
-
-> **Option B (GitHub-linked):** **General → Pull** fetches the latest blueprint compose from the repo, then **Redeploy**.
-
-No action is required for custom GHCR images beyond clicking **Redeploy** after a new stack release.
-
----
-
-### How Compose File Changes Reach You
-
-This depends on which deployment option you used:
-
-#### Option A (One-Click Template)
-
-The template was consumed at deploy time — Dokploy stored a snapshot of the compose YAML. **Changes to the compose file in this repo do NOT automatically update your running service.**
-
-To apply compose-level changes:
-1. In Dokploy, go to the service's **Compose** tab.
-2. Manually apply the relevant changes from `blueprints/dokploypress/docker-compose.yml` in this repo.
-3. Click **Redeploy**.
-
-#### Option B (Linked to GitHub Repo)
-
-Dokploy can fetch the latest compose from the repo. To update:
-1. In Dokploy, go to the service's **General** tab.
-2. Click **Pull** to fetch the latest blueprint compose (`./blueprints/dokploypress/docker-compose.yml`).
-3. Click **Redeploy**.
-
-New or changed services, ports, and environment variable defaults will be applied.
-
----
-
-### Your Data Is Always Safe
-
-Docker volumes (`wordpress_data`, `db_data`, `redis_data`) are **named and persistent**. A standard Redeploy never deletes volumes — only a manual `docker volume rm` would.
-
-> **Warning:** If the Compose project name changes (e.g., after a service rename in Dokploy), a redeploy may create new empty volumes. Always back up the database before a major update. See [phpMyAdmin — Common Tasks](#phpmyadmin--common-tasks) for export instructions.
-
----
-
-### New Environment Variables in Updates
-
-When a new version adds environment variables:
-
-- **If the variable has a default** (e.g., `NEW_VAR=${NEW_VAR:-default_value}`), it applies automatically on Redeploy. No action needed.
-- **If the variable is required** (no default), you must add it manually:
-  1. Go to **Environment** tab in Dokploy.
-  2. Add the new variable and its value.
-  3. Click **Redeploy**.
-
-The CHANGELOG always documents which new variables were introduced and whether they have defaults.
-
----
-
-### Upgrading to v1.13.x — Existing Installs
-
-v1.13.0 added the **WP-Cron sidecar**. v1.13.2 ensured `DISABLE_WP_CRON=true` is enforced via the entrypoint on every container start (new and existing installs alike). Here is what existing deployments need to do:
-
-#### What changes automatically on Redeploy
-
-| Change | Auto-applied? | Notes |
-|--------|:---:|-------|
-| `wp-cron` service starts | ✅ Yes (Option B) / ⚠️ Manual (Option A) | New service; must exist in your compose |
-| `DISABLE_WP_CRON=true` in wp-config | ✅ Yes — v1.13.2+ | Set by entrypoint via WP-CLI on every container start. No manual action needed. |
-| `WP_CRON_INTERVAL` env var | ✅ Default `300` | No action needed unless you want a different interval |
-
-#### Option A (One-Click Template) — Manual compose edit required
-
-Your compose snapshot does not have the `wp-cron` service. Add it manually:
-
-1. In Dokploy → **Compose** tab of your service.
-2. Add the following block before the `sftp:` service entry:
-
-```yaml
-  # ---------------------------------------------------------------------------
-  # WP-Cron sidecar — triggers wp-cron.php every 5 min via internal network.
-  # ---------------------------------------------------------------------------
-  wp-cron:
-    image: alpine:latest
-    command:
-      - /bin/sh
-      - -c
-      - |
-        echo 'WP-Cron sidecar started. Interval: 300s'
-        while true; do
-          if wget -q -O /dev/null 'http://nginx/wp-cron.php?doing_wp_cron' 2>&1; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] wp-cron triggered"
-          else
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] wp-cron request failed"
-          fi
-          sleep "${WP_CRON_INTERVAL:-300}"
-        done
-    depends_on:
-      nginx:
-        condition: service_healthy
-    networks:
-      - internal
-    restart: unless-stopped
-```
-
-3. Click **Redeploy**.
-
-> **`DISABLE_WP_CRON` is handled automatically** — the WordPress entrypoint (v1.13.2+) sets it in `wp-config.php` via WP-CLI on every container start. You do not need to add it manually to `WORDPRESS_CONFIG_EXTRA`.
-
-#### Option B (GitHub-linked) — Pull and Redeploy
-
-1. In Dokploy → **General** tab → click **Pull**.
-2. Click **Redeploy**.
-
-The `wp-cron` service, updated compose, and `DISABLE_WP_CRON` enforcement are all picked up automatically.
-
-#### Is there any risk?
-
-> **No data risk.** The WP-Cron sidecar is a read-only HTTP client — it only calls `wp-cron.php`. It does not touch any files, volumes, or databases. A failed cron trigger is silently logged and retried in 5 minutes.
-
-> **DISABLE_WP_CRON impact:** Before this change, WP fired pseudo-cron on every page load (if due). After this change, WP never fires cron on its own — the sidecar is solely responsible. If the `wp-cron` container is stopped or crashes, no scheduled jobs run until it restarts. `restart: unless-stopped` protects against this.
-
----
-
-### Upgrading to v1.14.0 — Existing Installs
-
-v1.14.0 adds WordPress Multisite support via `WP_MULTISITE_MODE`. Existing single-site deployments are **completely unaffected** — the new variable defaults to `disabled`.
-
-#### What changes automatically on Redeploy
-
-| Change | Auto-applied? | Notes |
-|--------|:---:|-------|
-| `WP_MULTISITE_MODE` env var | ✅ Default `disabled` | No action needed for single-site installs |
-| Nginx multisite rewrites | ✅ Yes — v1.14.0+ | Guarded by `!-e` — safe no-ops on single-site |
-| `WP_ALLOW_MULTISITE` enforcement | ✅ Only when `WP_MULTISITE_MODE` is set | Entrypoint Step 4a only acts on `subfolder`/`subdomain` |
-
-#### Option A (One-Click Template) — No action needed for single-site
-
-Your single-site install continues working with zero changes. If you want to **enable multisite**, add `WP_MULTISITE_MODE=subdomain` (or `subfolder`) to your Dokploy **Environment** tab and Redeploy. Then follow the **WordPress Multisite** section in this guide.
-
-#### Option B (GitHub-linked) — Pull and Redeploy
-
-1. In Dokploy → **General** tab → click **Pull**.
-2. Click **Redeploy**.
-
-The updated compose and entrypoint are picked up automatically. Single-site behaviour is unchanged.
-
----
-
-### Updating Settings Without a Version Change
-
-All PHP, Nginx, Redis, and resource limit settings can be changed **at any time without rebuilding images**:
-
-1. Go to your Compose service in Dokploy.
-2. Navigate to the **Environment** tab.
-3. Update the desired variables.
-4. Click **Redeploy**.
-
-The containers will restart with the new settings applied.
-
----
-
-## Using WP-CLI
-
-WP-CLI is pre-installed in the WordPress container. To use it:
-
-```bash
-# Access the WordPress container
-docker exec -it <wordpress-container-name> bash
-
-# Run WP-CLI commands
-wp plugin list
-wp cache flush
-wp core update
-wp cron event run --due-now
-```
-
----
-
-## Troubleshooting
-
-### WordPress Not Loading
-
-1. Check if all containers are running in Dokploy (look for green status).
-2. Verify database credentials match between services.
-3. Check container logs for errors via Dokploy's Logs tab.
-
-### Upload Size Issues
-
-Ensure both PHP and Nginx limits are set to the same value:
-
-```env
-PHP_UPLOAD_MAX_FILESIZE=512M
-PHP_POST_MAX_SIZE=512M
-NGINX_CLIENT_MAX_BODY_SIZE=512M
-```
-
-### Redis Not Connecting
-
-1. Verify the Redis container is healthy in Dokploy.
-2. Run `wp redis status` and `wp millicache test` inside the WordPress container.
-3. Go to **Settings → Redis** and click **Enable Object Cache**.
-4. If still failing, check Redis settings in `wp-config.php` (auto-configured by this stack):
-   ```php
-   define('WP_REDIS_HOST', 'redis');
-   define('WP_REDIS_PORT', 6379);
-   define('WP_CACHE', true);
-   ```
-
----
-
-## MariaDB & phpMyAdmin — Full Walkthrough
-
-> **Important:** MariaDB is **not a separate service you install** in Dokploy. It is already bundled in this Docker Compose stack as the `db` service. When you deploy the stack, all six containers (nginx, wordpress, db, redis, phpmyadmin, plugin-installer) start together automatically. **No separate MariaDB installation step exists.**
-
-### How Services Are Connected — Internal Networking
-
-All containers communicate over a private Docker network named `internal`. WordPress connects to MariaDB using the container name `db` as the hostname — Docker's internal DNS resolves this automatically. You never touch an IP address.
+Every container communicates over a private Docker network called `internal`. WordPress reaches MariaDB using the container name `db` as its hostname — Docker's own internal DNS resolves that automatically, no IP addresses involved anywhere.
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │               Docker "internal" network              │
-│                                                      │
-│  [nginx] ──► [wordpress / php-fpm]                   │
-│                       │                              │
-│                       ├──► [db / MariaDB] ◄── [phpmyadmin]
-│                       │                              │
-│                       └──► [redis]                   │
-│                                                      │
-│  Only nginx & phpmyadmin are reachable from outside  │
+│                                                        │
+│  [nginx] ──► [wordpress / php-fpm]                    │
+│                       │                                │
+│                       ├──► [db / MariaDB] ◄── [phpmyadmin]*
+│                       │                                │
+│                       └──► [redis]                     │
+│                                                        │
+│  Only nginx (always) & phpmyadmin (*if enabled)       │
+│  are reachable from outside                            │
 └──────────────────────────────────────────────────────┘
 ```
 
-The environment variables that wire WordPress to the database:
-
-```env
-WORDPRESS_DB_HOST=db          # Container name — Docker DNS resolves automatically
-WORDPRESS_DB_USER=wordpress
-WORDPRESS_DB_PASSWORD=<your password>
-WORDPRESS_DB_NAME=wordpress
-```
-
-No manual connection step is needed. Everything is wired by the Compose file at deploy time.
-
-### Setting Up phpMyAdmin Access
-
-1. In Dokploy → **Domains** tab of your Compose service, add:
-   - **Domain:** `pma.yourdomain.com`
-   - **Service:** `phpmyadmin`
-   - **Port:** `80`
-2. Go to **General** tab → click **Reload**.
-3. Navigate to `https://pma.yourdomain.com`.
-4. Log in:
-   - **Username:** `wordpress`
-   - **Password:** value of `MYSQL_PASSWORD`
-
-### After First Deployment
-
-The database starts empty — WordPress auto-populates it during the **WordPress setup wizard** (first visit to your domain, where you set the site title, admin username, etc.).
-
-### phpMyAdmin — Common Tasks
+### phpMyAdmin — common tasks once you're in
 
 | Task | How |
 |------|-----|
-| Browse/edit tables | Left panel → select `wordpress` database |
+| Browse/edit tables | Left panel → select the `wordpress` database |
 | Import a `.sql` backup | **Import** tab → choose file → Go |
-| Export/backup database | **Export** tab → Quick → Go |
+| Export/backup the database | **Export** tab → Quick → Go |
 | Run raw SQL | **SQL** tab |
-| Change site URL | `wordpress` → `wp_options` → edit `siteurl` and `home` rows |
+| Change the site URL by hand | `wordpress` → `wp_options` → edit the `siteurl` and `home` rows |
 
-### Root Database Access (Advanced)
+### Root database access (advanced, bypasses phpMyAdmin entirely)
 
 ```bash
 # Get into the db container
@@ -614,103 +89,145 @@ FLUSH PRIVILEGES;
 
 ---
 
+## Upgrading the Database (MariaDB 10.6 → 11.8)
+
+This stack runs `mariadb:11.8`. If your deployment predates this version, your `db_data` volume was created under an older MariaDB (commonly `10.6`) — here's exactly what happens on your next Redeploy, and what to check.
+
+### What happens automatically
+
+`MARIADB_AUTO_UPGRADE=1` is set on the `db` service. The official MariaDB image detects an older data directory on startup and runs `mariadb-upgrade` automatically — this updates system tables (`mysql.*`), views, and metadata only. **Your actual site data (posts, users, options — the InnoDB tables) is not rewritten and is not at risk in the normal case.**
+
+A one-shot `db-preupgrade-snapshot` service runs before `db` starts and takes a file-level snapshot of the datadir into the `db_backup` volume, but **only** if it detects a pre-11.x datadir it hasn't already snapshotted — on a fresh install, or a volume already on 11.x, it does nothing and exits immediately.
+
+### What is NOT automatic — read this before redeploying
+
+- **The upgrade is one-way.** Once MariaDB 11.8 opens a 10.6 datadir, it can no longer be read by `mariadb:10.6`. There is no downgrade path other than restoring a backup.
+- **`MARIADB_AUTO_UPGRADE` only backs up system tables**, not your actual WordPress content — that's what the automatic `db-preupgrade-snapshot` is for, but it's a one-time safety net for this upgrade, not a substitute for a real backup habit.
+- **A manual database export is still required before you redeploy** — via phpMyAdmin (**Export** tab → Quick → Go) or `docker exec <db-container> mariadb-dump`. This is the only protection against an interruption during the upgrade itself (OOM kill, disk full, container restart mid-upgrade) — the one realistic data-loss scenario, and a backup fully covers it.
+- **First restart after the bump takes longer than usual** while `mariadb-upgrade` runs — give it a few minutes before assuming something's wrong; check the `db` container's logs if the healthcheck doesn't pass.
+
+### Restoring from the automatic pre-upgrade snapshot
+
+If the upgrade goes wrong and you need to roll back to the pre-upgrade state:
+
+1. Stop the stack in Dokploy.
+2. Find the snapshot: it's inside the `db_backup` volume (`{STACK_SLUG}_db_backup`), named `preupgrade-<old-version>-<date>.tar.gz`.
+3. Clear the current `db_data` volume contents and extract the tarball into it:
+   ```bash
+   docker run --rm -v <stack>_db_backup:/backup -v <stack>_db_data:/restore \
+     alpine sh -c "rm -rf /restore/* && tar -xzf /backup/preupgrade-*.tar.gz -C /restore"
+   ```
+4. In the **Compose** tab, pin the `db` image back to `mariadb:10.6` and remove (or leave — it will no-op) `MARIADB_AUTO_UPGRADE`.
+5. Redeploy.
+
+Once an upgrade is verified working, the snapshot tarball in `db_backup` can be deleted — it's a one-time restore point for this specific upgrade, not an ongoing backup solution. Keep making regular manual database exports as your primary backup strategy.
+
+---
+
 ## Renaming the Stack in Dokploy — Will It Break Updates?
 
-**Short answer: UI display names are safe. Volume names are controlled by `STACK_SLUG` — set it once before the first deploy.**
+**Short answer: UI display names are safe. Volume names are controlled by `STACK_SLUG` — set it once before the first deploy.** (The README's [Volumes section](../README.md#volumes--where-your-data-lives) covers the basics; this is the fuller reference.)
 
-### Display name vs volume names
+### Display name vs. volume names
 
-- The **display name** in Dokploy (e.g. "DokployPress") is cosmetic — rename anytime in **General**.
-- **Docker volume names** come from `STACK_SLUG` (preferred) or Dokploy's `COMPOSE_PROJECT_NAME` fallback. They do **not** follow UI renames.
+- The **display name** in Dokploy (e.g. "DokployPress") is cosmetic — rename anytime in **General**, nothing else is affected.
+- **Docker volume names** come from `STACK_SLUG` (or Dokploy's `COMPOSE_PROJECT_NAME` if you never set one). They do **not** follow UI renames.
 
-### Prevent long volume names
+### What changing `STACK_SLUG` after data exists actually does
 
-Set `STACK_SLUG` to a short site identifier **before the first deploy**:
+> **Warning:** Docker doesn't rename anything — it creates **new, empty** volumes under the new name. Your WordPress files, database, and Redis data stay in the **old** volumes, fully intact on disk, just detached from the stack Dokploy is now pointing at.
 
-```env
-STACK_SLUG=mysite
-```
+### Safe procedure if you're already on a long, auto-generated volume name
 
-Volumes become `mysite_data`, `mysite_db_data`, `mysite_redis_data`.
+1. Note your current volume names: `docker volume ls | grep _data`
+2. Back up the database and `wp-content` before touching anything.
+3. Don't change `STACK_SLUG` on a live site unless you're prepared to manually migrate the data into the new volumes afterward.
+4. Pure UI display renames (the cosmetic name in Dokploy's dashboard) are always safe and need no redeploy.
 
-### What changing `STACK_SLUG` later does
+---
 
-> **Warning:** If you change `STACK_SLUG` after data exists, Docker creates **new empty volumes** with the new prefix. Your WordPress files, database, and Redis data stay in the **old** volumes (still on disk, but detached from the stack).
+## Fresh install: plugins/mu-plugins not showing?
 
-### Safe procedure for existing long-named volumes
+On a genuinely new site you should see, once it's finished setting up:
 
-1. Note current volume names: `docker volume ls | grep _data`
-2. Back up database and `wp-content` before any compose changes.
-3. Do **not** change `STACK_SLUG` on a live site unless you plan to migrate data into the new volumes.
-4. UI display renames alone are safe — no redeploy required.
+| Location | What |
+|----------|------|
+| **Plugins** | Redis Object Cache + MilliCache (inactive until the first front-end visit) |
+| **Plugins → Must-Use** (bottom of the Plugins screen) | DokployPress Cache Bootstrap + DokployPress Migration Fixer |
+
+**Plugins stay inactive until the first front-end page load** — visiting only wp-admin doesn't trigger it. Load your homepage once while logged out, then refresh the Plugins screen.
+
+If MilliCache or the mu-plugins are still missing after that:
+
+1. Dokploy → **Logs** → `plugin-installer` — confirm both plugins actually downloaded without errors.
+2. **Redeploy** — a WordPress container restart re-deploys the mu-plugins into the volume.
+3. Or fix it directly:
+   ```bash
+   docker exec -it <wordpress-container-name> bash
+   ls wp-content/plugins/millicache/millicache.php
+   ls wp-content/mu-plugins/
+   wp plugin activate redis-cache millicache --allow-root
+   wp redis enable --allow-root
+   wp millicache drop --allow-root
+   ```
 
 ---
 
 ## Migrating WordPress Sites from Local Disk
 
-If your existing WordPress sites store files on local server disk (uploads, themes, plugins) rather than object storage, here is the full migration workflow.
+If your existing WordPress site stores files on local server disk (uploads, themes, plugins) rather than object storage, here's the full migration workflow.
 
-### What Needs Migrating
+### What needs migrating
 
 | Component | Method |
 |-----------|--------|
-| Database | Export `.sql` → Import via phpMyAdmin or WP-CLI |
+| Database | Export `.sql` → import via phpMyAdmin or WP-CLI |
 | WordPress files (uploads, themes, plugins) | Upload via SFTP, File Browser, or WP-CLI |
-| `wp-config.php` | **Not migrated** — auto-generated from env vars by this stack |
+| `wp-config.php` | **Not migrated** — this stack auto-generates it from environment variables |
 | Credentials/settings | Set via Dokploy environment variables at deploy time |
 
-### Step 1 — Deploy the Empty Stack First
+### Step 1 — Deploy the empty stack first
 
-Deploy the stack as in Step 3. Complete the WordPress setup wizard with any temporary credentials. Wait until **all containers show as healthy** in Dokploy before proceeding.
+Deploy as described in the README. Complete the WordPress setup wizard with any temporary credentials. Wait until **all containers show healthy** in Dokploy before proceeding.
 
-### Step 2 — Export the Old Database
-
-On your existing server (via SSH or the server's phpMyAdmin):
+### Step 2 — Export the old database
 
 ```bash
-# Via SSH — using mysqldump
+# Via SSH, using mysqldump
 mysqldump -u <db_user> -p <database_name> > site_backup.sql
 
-# Or via phpMyAdmin on the old server → Export → Quick → Go
+# Or via phpMyAdmin on the OLD server → Export → Quick → Go
 ```
 
-### Step 3 — Export WordPress Files
+### Step 3 — Export WordPress files
 
 ```bash
-# Compress wp-content for transfer
 zip -r wp-content-backup.zip wp-content/uploads/ wp-content/themes/ wp-content/plugins/
 ```
 
-### Step 4 — Upload Files to the New Server
+### Step 4 — Upload files to the new server
 
-Use one of the file access methods in this repo's docs:
+Pick one:
+- **[SFTP Setup](./sftp-setup.md)** — best for large transfers
+- **[File Browser Setup](./filebrowser-setup.md)** — browser-based drag & drop
+- **[VS Code Remote Setup](./vscode-remote-setup.md)** — best if you're a developer already using VS Code
 
-- **[SFTP Setup](./sftp-setup.md)** — Best for large file transfers
-- **[File Browser Setup](./filebrowser-setup.md)** — Browser-based drag & drop
-- **[VS Code Remote Setup](./vscode-remote-setup.md)** — Best for developers
+Upload into the WordPress volume at `/var/www/html/wp-content/`.
 
-Upload files into the WordPress volume at `/var/www/html/wp-content/`.
+### Step 5 — Import the database
 
-### Step 5 — Import the Database
-
-**Via phpMyAdmin (best for small/medium databases):**
+**Via phpMyAdmin (small/medium databases):**
 1. Open `pma.yourdomain.com`
-2. Select the `wordpress` database in the left panel
-3. **Import** tab → choose `site_backup.sql` → **Go**
+2. Select the `wordpress` database → **Import** tab → choose `site_backup.sql` → **Go**
 
 **Via WP-CLI (recommended for large databases):**
 ```bash
-# Copy the SQL file into the container
 docker cp site_backup.sql <wordpress-container-name>:/tmp/
-
-# Import it
 docker exec -it <wordpress-container-name> bash
 wp db import /tmp/site_backup.sql --allow-root
 ```
 
-### Step 6 — Update the Site URL
-
-After import, the database still references your old domain. Update it with WP-CLI (this correctly handles PHP serialized data):
+### Step 6 — Update the site URL
 
 ```bash
 docker exec -it <wordpress-container-name> bash
@@ -718,10 +235,9 @@ wp search-replace 'https://old-domain.com' 'https://new-domain.com' --allow-root
 wp cache flush --allow-root
 ```
 
-Or manually in phpMyAdmin:
-- Table `wp_options` → rows `siteurl` and `home` → update both values to the new domain.
+`wp search-replace` correctly handles WordPress's serialized data — don't do this with a plain find-and-replace in phpMyAdmin unless you have to (if so: table `wp_options`, rows `siteurl` and `home`).
 
-### Step 7 — Fix File Permissions
+### Step 7 — Fix file permissions
 
 ```bash
 docker exec -it <wordpress-container-name> bash
@@ -730,7 +246,7 @@ find /var/www/html/wp-content/ -type d -exec chmod 755 {} \;
 find /var/www/html/wp-content/ -type f -exec chmod 644 {} \;
 ```
 
-### Step 8 — Re-activate Redis Cache
+### Step 8 — Re-activate Redis cache
 
 ```bash
 docker exec -it <wordpress-container-name> bash
@@ -738,47 +254,36 @@ wp plugin activate redis-cache --allow-root
 wp redis enable --allow-root
 ```
 
-### Note on Local Disk vs. Object Storage
+### Local disk vs. object storage
 
-This stack stores `wp-content/uploads/` in the `wordpress_data` Docker volume on the **VPS disk**. This works well for most sites. To offload media to **S3 or Cloudflare R2**, install the **WP Offload Media** plugin — no changes to this stack's Docker configuration are required.
+This stack stores `wp-content/uploads/` in the `wordpress_data` Docker volume on the VPS disk — fine for most sites. To offload media to S3 or Cloudflare R2, install the **WP Offload Media** plugin; no changes to this stack's Docker configuration are needed.
 
----
+### Alternative — Migrate Guru (plugin-based)
 
-### Alternative Migration Method — Migrate Guru (Plugin-Based)
+If you'd rather not do manual export/import, [Migrate Guru](https://wordpress.org/plugins/migrate-guru/) is a solid free option that handles large sites well.
 
-If you prefer a plugin-driven migration rather than manual export/import, **Migrate Guru** is a solid free option that handles large sites well and avoids the file size limits that affect other migration plugins.
+1. Install and activate Migrate Guru on your **source** site.
+2. Select **Other Host** as the destination type.
+3. Provide destination credentials for whatever access method you're using (SSH/SFTP volume path, or the optional SFTP container — see [SFTP Setup](./sftp-setup.md) for where files live on the VPS). You choose the exact path based on what your WinSCP/SFTP session shows.
+4. For the database, use phpMyAdmin or WP-CLI import after files transfer.
+5. Once done, run the same URL-update step as Step 6 above.
 
-**Plugin:** [Migrate Guru — WordPress.org](https://wordpress.org/plugins/migrate-guru/)
-
-**How it works with this stack:**
-
-1. Install and activate **Migrate Guru** on your **source site** (the existing live server).
-2. On Migrate Guru, select **Other Host** as the destination type.
-3. Provide destination credentials for however **you** access files on this server (SSH/SFTP volume path, optional SFTP container, etc.). See [SFTP Setup](./sftp-setup.md) for where WordPress files live on the VPS — e.g. `/var/lib/docker/volumes/<project-name>_data/_data/`. **You choose the path in the migration plugin** based on what works in your WinSCP session.
-4. For the database, use phpMyAdmin or WP-CLI import after Migrate Guru transfers files.
-5. Once the migration completes, run the URL update step:
-   ```bash
-   docker exec -it <wordpress-container-name> bash
-   wp search-replace 'https://old-domain.com' 'https://new-domain.com' --allow-root
-   wp cache flush --allow-root
-   ```
-
-> **Note:** Migrate Guru handles serialized data, multisite, and large databases gracefully. It is particularly useful when the source site is on shared hosting where SSH/mysqldump access is restricted.
+Migrate Guru handles serialized data, multisite, and large databases gracefully — particularly useful when the source site is on shared hosting where SSH/`mysqldump` access is restricted.
 
 ---
 
 ## MilliCache Full-Page Caching (Built In)
 
-**[MilliCache](https://github.com/MilliPress/MilliCache)** is bundled in this stack alongside Redis Object Cache. MilliCache stores complete HTML pages in Redis and serves them via the `advanced-cache.php` drop-in **before WordPress fully boots** on cache hits.
+[MilliCache](https://github.com/MilliPress/MilliCache) is bundled alongside Redis Object Cache. It stores complete rendered HTML pages in Redis and serves them via the `advanced-cache.php` drop-in **before WordPress fully boots** on a cache hit.
 
 | | Redis Object Cache | MilliCache |
 |---|---|---|
-| **Caches** | DB queries and PHP objects | Entire rendered HTML page |
-| **Drop-in** | `object-cache.php` | `advanced-cache.php` |
-| **Redis DB** | 0 (default) | 1 (`MC_STORAGE_DB`) |
-| **Nginx changes** | None | None |
+| Caches | DB queries and PHP objects | The entire rendered HTML page |
+| Drop-in | `object-cache.php` | `advanced-cache.php` |
+| Redis DB | 0 (default) | 1 (`MC_STORAGE_DB`) |
+| Nginx changes needed | None | None |
 
-### How it works in this stack
+### How a request flows through it
 
 ```
 Visitor → Nginx → PHP-FPM → advanced-cache.php → Redis (hit) → HTML response
@@ -786,9 +291,9 @@ Visitor → Nginx → PHP-FPM → advanced-cache.php → Redis (hit) → HTML re
                                          Full WordPress boot → store in Redis
 ```
 
-PHP-FPM still runs on cache hits (the drop-in is PHP), but WordPress core, plugins, and the database are skipped.
+PHP-FPM still runs on cache hits (the drop-in is PHP), but WordPress core, plugins, and the database are all skipped.
 
-### wp-config constants (auto-applied)
+### wp-config constants this stack sets automatically
 
 ```php
 define( 'WP_CACHE', true );
@@ -799,29 +304,27 @@ define( 'MC_STORAGE_PORT', 6379 );
 define( 'MC_STORAGE_DB', 1 );
 ```
 
-### Important rules
+### Rules to keep in mind
 
-- **Do not** install other page-cache plugins (WP Super Cache, W3 Total Cache, Cache Enabler) — only one plugin can own `advanced-cache.php`.
-- **Keep** Redis Object Cache — MilliPress recommends both; they cache different layers.
-- **Logged-in users** bypass MilliCache by default (personalized content).
-- For large sites, increase `REDIS_MAXMEMORY` (e.g. `1gb`) in Dokploy Environment.
+- **Don't** install another full-page cache plugin (WP Super Cache, W3 Total Cache, Cache Enabler) — only one plugin can own `advanced-cache.php`, they'll conflict.
+- **Keep** Redis Object Cache running alongside it — they cache different layers, MilliPress recommends both together.
+- Logged-in users bypass MilliCache by default (personalized content shouldn't be cached).
+- For a large, content-heavy site, raise `REDIS_MAXMEMORY` (e.g. `1gb`) in Dokploy Environment.
 
-### Verify cache hits
+### Verifying cache hits
 
 ```bash
 wp millicache test
 wp millicache stats
 ```
 
-Or enable debug headers (`MC_CACHE_DEBUG`) and look for `X-MilliCache-Status: hit` on repeat anonymous visits.
+Or turn on `MC_CACHE_DEBUG` and look for `X-MilliCache-Status: hit` on a repeat, logged-out visit.
 
 ---
 
 ## WP-Cron — Reliable Scheduled Tasks
 
-WordPress's built-in pseudo-cron (`wp-cron.php`) only fires when a visitor hits the site. On low-traffic sites, this means scheduled events (e.g., scheduled posts, plugin cleanups, email queues) can be delayed by hours.
-
-This stack ships a dedicated **WP-Cron sidecar** that triggers `wp-cron.php` on a fixed schedule regardless of traffic.
+WordPress's built-in pseudo-cron (`wp-cron.php`) only fires when a visitor happens to load the site. On a low-traffic site, that can delay scheduled posts, plugin cleanup jobs, and email queues by hours. This stack ships a dedicated sidecar that triggers it on a fixed schedule instead, regardless of traffic.
 
 ### How it works
 
@@ -833,19 +336,15 @@ This stack ships a dedicated **WP-Cron sidecar** that triggers `wp-cron.php` on 
                                      WordPress processes due events
 ```
 
-The request travels over the **internal Docker network** — no SSL, no external DNS, no dependency on your public domain being reachable.
-
-`DISABLE_WP_CRON=true` is set in `wp-config.php` so WordPress does **not** fire its own pseudo-cron on page load. The sidecar is the only scheduler.
+The request travels over the internal Docker network — no SSL, no external DNS, no dependency on your public domain being reachable. `DISABLE_WP_CRON=true` is set in `wp-config.php` automatically, so WordPress never fires its own pseudo-cron — this sidecar is the sole scheduler.
 
 ### Verifying it's running
 
 ```bash
-# View real-time cron log in Dokploy → Logs → wp-cron
-# Or via SSH:
 docker logs <compose-name>-wp-cron-1 --tail 20
 ```
 
-Expected output every 5 minutes:
+Expected, every `WP_CRON_INTERVAL` seconds (default 300):
 
 ```
 WP-Cron sidecar started. Interval: 300s
@@ -853,7 +352,7 @@ WP-Cron sidecar started. Interval: 300s
 [2026-06-09 16:50:00] wp-cron triggered
 ```
 
-### Manually triggering cron (WP-CLI)
+### Triggering it manually
 
 ```bash
 docker exec -it <wordpress-container-name> bash
@@ -861,190 +360,138 @@ wp cron event run --due-now --allow-root
 wp cron event list --allow-root
 ```
 
-### Changing the cron interval
-
-Add to Dokploy **Environment**, then **Redeploy**:
-
-```env
-WP_CRON_INTERVAL=60   # Every 1 minute (high-frequency sites)
-WP_CRON_INTERVAL=600  # Every 10 minutes (low-activity sites)
-```
-
 ### Disabling the sidecar
 
-If you want to manage WP-Cron yourself (e.g., via a host-level system cron or Cronicle):
+If you want to manage WP-Cron yourself (host-level system cron, Cronicle, etc.):
 
-1. Remove or comment out the `wp-cron:` service block in your compose.
-2. Remove `define('DISABLE_WP_CRON', true);` from `WORDPRESS_CONFIG_EXTRA` — or add `DISABLE_WP_CRON=false` to Environment.
+1. Remove the `wp-cron:` service block from your compose file.
+2. Add `DISABLE_WP_CRON=false` to Dokploy Environment (or otherwise stop the stack from forcing it on).
 3. Redeploy.
 
 ---
 
 ## WordPress Multisite
 
-This stack supports WordPress Multisite (Network) with a single environment variable. Both **subfolder** and **subdomain** network types are fully supported.
+This stack supports WordPress Multisite (Network) via one environment variable — both **subfolder** and **subdomain** network types.
 
 ### How it works
 
-Setting `WP_MULTISITE_MODE` to `subfolder` or `subdomain` causes the custom entrypoint to enforce `WP_ALLOW_MULTISITE=true` in `wp-config.php` via WP-CLI on every container start — the same idempotent pattern used for `DISABLE_WP_CRON`. This is what makes **Tools → Network Setup** appear in WP Admin.
+Setting `WP_MULTISITE_MODE` to `subfolder` or `subdomain` makes the entrypoint enforce `WP_ALLOW_MULTISITE=true` in `wp-config.php` on every container start — the same idempotent pattern used for `DISABLE_WP_CRON`. This is what makes **Tools → Network Setup** appear in WP Admin.
 
-The Nginx configuration already includes multisite-safe rewrites for both modes:
+Nginx already includes multisite-safe rewrites for both modes, guarded so they're no-ops on single-site installs:
 
 | Rewrite | Mode | Purpose |
 |---------|------|---------|
 | `rewrite /wp-admin$ … permanent` | Both | Trailing-slash redirect for subsite admin panels |
 | `rewrite ^(/[^/]+)?(/wp-.*)` | Subfolder | Strips `/site1` prefix from `/site1/wp-admin` |
 | `rewrite ^(/[^/]+)?(/.*\.php)` | Subfolder | Strips `/site1` prefix from `/site1/wp-login.php` |
-| `location ^~ /blogs.dir` | Both (legacy) | Pre-WP 3.5 internal upload alias — no-op on all modern installs |
+| `location ^~ /blogs.dir` | Both (legacy) | Pre-WP 3.5 upload alias — no-op on modern installs |
 
-All rewrites are guarded by `!-e $request_filename` — they are no-ops on single-site installs.
+> Modern WordPress multisite (3.5+) stores uploads at `wp-content/uploads/sites/N/` and serves them as normal static files — no special Nginx rules needed for uploads themselves.
 
-> **Note:** Modern WordPress multisite (3.5+, 2013) stores uploads at `wp-content/uploads/sites/N/` and serves them as standard static files. No special nginx rules are needed for uploads.
-
-### Subdomain vs Subfolder — which to choose
+### Subdomain vs. subfolder
 
 | | Subfolder | Subdomain |
 |---|---|---|
 | Sub-sites at | `yourdomain.com/site1/` | `site1.yourdomain.com` |
 | DNS required | Single A record | **Wildcard DNS** `*.yourdomain.com` |
 | Traefik config | Standard | Wildcard domain rule required |
-| Can convert later | ✅ Yes (WP CLI) | ✅ Yes (WP CLI) |
-| Install on existing WP? | ✅ Yes | ✅ Yes |
+| Can convert later | Yes (WP-CLI) | Yes (WP-CLI) |
 
-> **Important for subdomain mode:** You **must** add a wildcard DNS record (`*.yourdomain.com → your server IP`) at your DNS provider **before** the Network Setup wizard runs. Without wildcard DNS, new subsites will not resolve. In Dokploy, you also need a wildcard domain entry (`*.yourdomain.com`) pointing to the nginx service on port 80. DNS alone is not enough; Traefik/Dokploy still needs the wildcard domain route.
+> **Subdomain mode requires a wildcard DNS record** (`*.yourdomain.com → your server IP`) at your DNS provider **before** running Network Setup, plus a matching wildcard domain entry in Dokploy (Phase 3 below). DNS alone isn't enough — Traefik/Dokploy needs the wildcard route too.
 
 ### Phase 1 — Enable Network Setup
 
-1. Add to Dokploy **Environment**:
+1. Dokploy Environment:
    ```env
    WP_MULTISITE_MODE=subdomain
    # or: WP_MULTISITE_MODE=subfolder
    ```
-2. Click **Redeploy**.
-3. Check **Logs → wordpress** — you should see:
+2. Redeploy.
+3. Check **Logs → wordpress** for:
    ```
-   [DokployPress] Multisite mode: subdomain — enforcing WP_ALLOW_MULTISITE...
    [DokployPress] ✅ WP_ALLOW_MULTISITE set in wp-config.php (Tools → Network Setup now available).
    ```
-4. Open WP Admin in a **private/incognito window** (bypasses full-page cache) → **Tools → Network Setup**.
+4. Open WP Admin in a **private/incognito window** (bypasses the full-page cache) → **Tools → Network Setup**.
 
-### Phase 2 — Run the Network Setup Wizard
+### Phase 2 — Run the Network Setup wizard
 
-WordPress asks you to **deactivate all plugins** before creating the network. On this stack, Redis Object Cache and MilliCache are normally auto-activated by the `dokploypress-cache-bootstrap` mu-plugin. **From stack version 1.14.5 onward**, that bootstrap is paused automatically while Network Setup is in progress (`WP_ALLOW_MULTISITE` is true but `MULTISITE` is not yet defined), so you can deactivate plugins in wp-admin and they will stay off.
+WordPress asks you to deactivate all plugins first. Redis Object Cache and MilliCache normally auto-activate via a mu-plugin — that bootstrap pauses itself automatically while Network Setup is in progress, so deactivating them in wp-admin sticks.
 
-1. In **Plugins**, deactivate **Redis Object Cache** and **MilliCache** (and any other active plugins).
-2. In **Tools → Network Setup**, choose your network type (must match `WP_MULTISITE_MODE`).
-3. Enter a **Network Title** and **Network Admin Email**.
-4. Click **Install**.
-5. WordPress displays two blocks of code. **Do not** paste these directly into `wp-config.php` — the entrypoint manages that file. Instead:
+1. In **Plugins**, deactivate Redis Object Cache, MilliCache, and anything else active.
+2. **Tools → Network Setup** → choose the type matching `WP_MULTISITE_MODE` → enter a Network Title and Admin Email → **Install**.
+3. WordPress shows you two blocks of generated code. **Don't** paste these into `wp-config.php` directly — the entrypoint manages that file. Instead, put only the generated `define(...)` lines as the *value* of `WORDPRESS_MULTISITE_CONFIG` in Dokploy Environment:
+   ```env
+   WORDPRESS_MULTISITE_CONFIG=define( 'MULTISITE', true ); define( 'SUBDOMAIN_INSTALL', true ); define( 'DOMAIN_CURRENT_SITE', 'yourdomain.com' ); define( 'PATH_CURRENT_SITE', '/' ); define( 'SITE_ID_CURRENT_SITE', 1 ); define( 'BLOG_ID_CURRENT_SITE', 1 );
+   ```
+   Copy **exactly** what WordPress generated for you — the values are specific to your install, and subfolder mode's constants differ slightly (`SUBDOMAIN_INSTALL` is `false`, etc.). Don't add these as separate bare `define(...)` environment rows — they're PHP constants, not env var names, and won't be read unless they're inside `WORDPRESS_MULTISITE_CONFIG`.
+4. Redeploy. Check **Logs → wordpress** for `WORDPRESS_MULTISITE_CONFIG applied to wp-config.php`.
+5. Log back into WP Admin — you'll have a **My Sites** menu and **Network Admin** panel now.
 
-**Add only the WordPress-generated multisite constants to `WORDPRESS_MULTISITE_CONFIG`** in Dokploy Environment. They must be the value of the `WORDPRESS_MULTISITE_CONFIG` variable.
+**"An existing network was detected"** — WordPress found multisite tables already in the database (network was already created or partially created). Don't remove tables; just make sure `WORDPRESS_MULTISITE_CONFIG` has the generated constants, redeploy, and confirm the "applied to wp-config.php" log line.
 
-If Dokploy shows a plain text environment editor, use one `KEY=value` line:
-
-```env
-WORDPRESS_MULTISITE_CONFIG=define( 'MULTISITE', true ); define( 'SUBDOMAIN_INSTALL', true ); define( 'DOMAIN_CURRENT_SITE', 'yourdomain.com' ); define( 'PATH_CURRENT_SITE', '/' ); define( 'SITE_ID_CURRENT_SITE', 1 ); define( 'BLOG_ID_CURRENT_SITE', 1 );
-```
-
-If Dokploy shows separate **Name** and **Value** fields, use this:
-
-```text
-Name: WORDPRESS_MULTISITE_CONFIG
-Value:
-define( 'MULTISITE', true );
-define( 'SUBDOMAIN_INSTALL', true );
-define( 'DOMAIN_CURRENT_SITE', 'yourdomain.com' );
-define( 'PATH_CURRENT_SITE', '/' );
-define( 'SITE_ID_CURRENT_SITE', 1 );
-define( 'BLOG_ID_CURRENT_SITE', 1 );
-```
-
-Do **not** add bare `define(...)` lines as separate environment rows. They are PHP constants, not environment variable names, and the stack will not read them unless they are inside `WORDPRESS_MULTISITE_CONFIG`.
-
-> For subfolder mode, `SUBDOMAIN_INSTALL` is `false` and WordPress may also add `define( 'MULTISITE_COOKIE_PATH', '/' );` and similar. Copy **exactly** what WordPress generated in the wizard — the values are specific to your install.
-
-6. Click **Redeploy**.
-7. Check **Logs → wordpress** for `WORDPRESS_MULTISITE_CONFIG applied to wp-config.php`.
-8. Log back into WP Admin — you now have a **My Sites** menu and **Network Admin** panel.
-
-#### Network Setup says an existing network was detected
-
-This means WordPress found multisite database tables, so the network was already created or partially created. In most cases, do **not** remove database tables. Finish the setup by making sure `WORDPRESS_MULTISITE_CONFIG` contains the generated constants, redeploy, and confirm the log line `WORDPRESS_MULTISITE_CONFIG applied to wp-config.php`.
-
-#### Network Setup: plugins keep reactivating (stack before 1.14.5)
-
-If Redis Object Cache and MilliCache turn back on immediately after you deactivate them, the cache bootstrap mu-plugin is re-activating them on every page load. Use either approach:
-
-**Option A — Temporary disable bootstrap (no image rebuild):**
-
+**Plugins keep reactivating themselves during setup** — if Redis Object Cache/MilliCache turn back on right after you deactivate them, disable the bootstrap mu-plugin temporarily:
 ```bash
 docker exec -it <wordpress-container-name> bash
-if [ -f /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php ]; then
-  mv /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php \
-     /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php.off
-elif [ -f /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php ]; then
-  mv /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php \
-     /var/www/html/wp-content/mu-plugins/ksm-cache-bootstrap.php.off
-fi
+mv /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php \
+   /var/www/html/wp-content/mu-plugins/dokploypress-cache-bootstrap.php.off
 wp plugin deactivate redis-cache millicache --allow-root --path=/var/www/html
 ```
-
-Then deactivate any remaining plugins in wp-admin, complete **Tools → Network Setup**, add `WORDPRESS_MULTISITE_CONFIG` in Dokploy, and **Redeploy**. The entrypoint restores the mu-plugin from the image on redeploy.
-
-**Option B — Upgrade to stack 1.14.5+** (bootstrap pauses automatically during Network Setup), then deactivate plugins in wp-admin and continue the wizard.
+Finish Network Setup, add `WORDPRESS_MULTISITE_CONFIG`, and Redeploy — the entrypoint restores the mu-plugin from the image automatically.
 
 ### If WP Admin redirects to `https://nginx/wp-login.php`
 
-`nginx` is the internal Docker service name and should never appear in browser redirects. This can happen if an internal request writes the Docker hostname into WordPress `siteurl` or `home`.
-
-1. Confirm `WORDPRESS_PUBLIC_URL=https://yourdomain.com` is set in Dokploy **Environment**. New blueprint deployments set this automatically from the main domain.
-2. Click **Redeploy**.
-3. Check **Logs → wordpress** for `Repaired siteurl` or `Repaired home`.
-4. Open WP Admin again in a private/incognito window.
-
-The repair is intentionally narrow: it only changes `siteurl`/`home` when the current value is an internal host such as `nginx`, `wordpress`, `localhost`, an IP address, or a non-domain container name.
+`nginx` is the internal Docker service name and should never appear in a browser redirect. Confirm `WORDPRESS_PUBLIC_URL=https://yourdomain.com` is set, redeploy (the stack repairs `siteurl`/`home` on startup, but only when it detects an internal-host value), and try again in a private window.
 
 ### Phase 3 — Wildcard domain in Dokploy (subdomain mode only)
 
-1. In Dokploy → **Domains** tab of your Compose service, add:
-   - **Domain:** `*.yourdomain.com`
-   - **Service:** `nginx`
-   - **Port:** `80`
-2. Click **Reload**.
-
-Traefik will now route all subdomain requests to the nginx container, which passes them to WordPress. WordPress uses the `HTTP_HOST` header to determine which subsite to serve.
+Dokploy → **Domains** tab → add domain `*.yourdomain.com` → service `nginx` → port `80` → **Reload**. Traefik now routes all subdomain requests to nginx, which passes them to WordPress; WordPress uses the `HTTP_HOST` header to pick the right subsite.
 
 ### Caching compatibility
 
-Both Redis Object Cache and MilliCache are **fully compatible** with multisite. MilliCache stores full-page cache per unique URL, so `site1.yourdomain.com/` and `site2.yourdomain.com/` are cached independently. No additional configuration is required.
+Both Redis Object Cache and MilliCache are fully compatible with multisite — MilliCache caches per unique URL, so `site1.yourdomain.com/` and `site2.yourdomain.com/` are cached independently, no extra config needed.
 
 ### Creating sub-sites
 
-Once Network Setup is complete, go to **Network Admin → Sites → Add New**. For subdomain mode, enter just the subdomain prefix (e.g. `site1` for `site1.yourdomain.com`).
+**Network Admin → Sites → Add New**. For subdomain mode, enter just the prefix (e.g. `site1` for `site1.yourdomain.com`).
 
 ### Disabling Multisite
 
-To revert to single-site:
-
-1. Change `WP_MULTISITE_MODE=disabled` in Dokploy Environment.
-2. Remove the multisite constants (`MULTISITE`, `SUBDOMAIN_INSTALL`, etc.) from `WORDPRESS_MULTISITE_CONFIG`.
+1. Set `WP_MULTISITE_MODE=disabled` in Dokploy Environment.
+2. Remove the multisite constants from `WORDPRESS_MULTISITE_CONFIG`.
 3. Redeploy.
 
-> **Warning:** Reverting multisite after sub-sites have been created will make those sub-sites inaccessible. Back up the database before reverting.
+> **Warning:** reverting after sub-sites exist makes those sub-sites inaccessible. Back up the database first.
+
+---
+
+## How updates reach an existing deployment
+
+### Custom stack images (nginx, WordPress, plugin-installer)
+
+These are published to GHCR under a specific version tag (not `:latest`) that gets bumped by this project's own release process — check `blueprints/dokploypress/docker-compose.yml` for the exact tag currently pinned. Updating means pulling the new pinned version, not an automatic background update:
+
+- **Option A (One-Click Template):** Dokploy stored a snapshot of the compose YAML at create time — it does **not** auto-update. Go to the service's **Compose** tab, update the image tags to match the current `blueprints/dokploypress/docker-compose.yml` in this repo, then **Redeploy**.
+- **Option B (GitHub-linked):** **General → Pull** fetches the latest blueprint compose (including the current pinned tags), then **Redeploy**.
+
+### Third-party images (MariaDB, Redis, phpMyAdmin, optional SFTP)
+
+Also version-pinned (see the README's version tables). To move to a newer pinned version yourself: edit the `image:` tag in the **Compose** tab, then **Redeploy**. MariaDB specifically — read [Upgrading the Database](#upgrading-the-database-mariadb-106--118) above before doing this, it's not a plain tag bump.
+
+### Compose file changes in general (new services, new env vars)
+
+Same two paths as above — Option A needs a manual **Compose** tab edit, Option B just needs **Pull** then **Redeploy**. New environment variables that ship with a default apply automatically on Redeploy; ones without a default need to be added manually in the **Environment** tab first. `CHANGELOG.md` documents which is which for every release, plus anything that needs action versus what's automatic.
+
+### Your data is always safe across an update
+
+Docker volumes (`wordpress_data`, `db_data`, `redis_data`, `db_backup`) are named and persistent — a standard Redeploy never deletes them, only a manual `docker volume rm` would. The one exception: if the Compose project name changes underneath you (e.g. after certain kinds of service renames in Dokploy), a redeploy can create *new*, empty volumes instead of reusing the old ones — see [Renaming the Stack](#renaming-the-stack-in-dokploy--will-it-break-updates) above. Always back up the database before a major update regardless.
 
 ---
 
 ## Related Documentation
 
-- [File Browser Setup](./filebrowser-setup.md) — Access WordPress files via a browser-based file manager
-- [SFTP Setup](./sftp-setup.md) — Access WordPress files via SFTP
-- [VS Code Remote Setup](./vscode-remote-setup.md) — Edit WordPress files directly in VS Code
-
----
-
-## Credits
-
-This guide is adapted from an article by **Al-Mamun Talukder** published on [itsmereal.com](https://itsmereal.com).
-
-> **Original Article:** [Easily Host WordPress Sites Using Dokploy with Redis and Nginx](https://itsmereal.com/easily-host-wordpress-sites-using-dokploy-with-redis-and-nginx/)
-> © Al-Mamun Talukder — shared with attribution under the spirit of open knowledge. All credit for the original concept, Docker Compose stack design, and article content belongs to the original author.
+- [Main README](../README.md) — start here for deploying and configuring the stack
+- [File Browser Setup](./filebrowser-setup.md) — browser-based file manager
+- [SFTP Setup](./sftp-setup.md) — SFTP file access
+- [VS Code Remote Setup](./vscode-remote-setup.md) — edit files directly in VS Code
+- [CHANGELOG](../CHANGELOG.md) — what changed in each release

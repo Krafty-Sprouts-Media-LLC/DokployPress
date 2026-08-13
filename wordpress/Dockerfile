@@ -1,4 +1,4 @@
-FROM wordpress:php8.3-fpm
+FROM wordpress:php8.4-fpm
 
 # =============================================================================
 # DokployPress — WordPress container image
@@ -35,14 +35,17 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 RUN pecl install redis \
     && docker-php-ext-enable redis
 
-# Install WP-CLI
-RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
-    && chmod +x wp-cli.phar \
-    && mv wp-cli.phar /usr/local/bin/wp
+# Install WP-CLI — pinned to a tagged release instead of the always-latest
+# gh-pages/phar/wp-cli.phar build (see IMPLEMENTATION_PLAN.md, Task 1.2).
+RUN curl -fLO https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar \
+    && chmod +x wp-cli-2.12.0.phar \
+    && mv wp-cli-2.12.0.phar /usr/local/bin/wp \
+    && wp --version --allow-root
 
-# Install php-fpm-healthcheck
+# Install php-fpm-healthcheck — pinned to a tagged release instead of the
+# always-moving master ref (see IMPLEMENTATION_PLAN.md, Task 1.2).
 RUN wget -O /usr/local/bin/php-fpm-healthcheck \
-    https://raw.githubusercontent.com/renatomefi/php-fpm-healthcheck/master/php-fpm-healthcheck \
+    https://raw.githubusercontent.com/renatomefi/php-fpm-healthcheck/v0.6.0/php-fpm-healthcheck \
     && chmod +x /usr/local/bin/php-fpm-healthcheck
 
 # Enable PHP-FPM status page for healthcheck

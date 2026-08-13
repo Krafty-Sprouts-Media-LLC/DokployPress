@@ -2,7 +2,8 @@
 # default.conf.template
 # DokployPress — Nginx site configuration template
 #
-# Processed by envsubst at container startup (NGINX_CLIENT_MAX_BODY_SIZE).
+# Processed by envsubst at container startup
+# (NGINX_CLIENT_MAX_BODY_SIZE, NGINX_FASTCGI_TIMEOUT).
 # Supports single-site and multisite (subfolder + subdomain) WordPress installs.
 # Served behind Traefik reverse proxy; server_name _ accepts all hostnames.
 #
@@ -42,10 +43,11 @@ server {
     # Max upload size - configurable via environment variable
     client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
 
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
+    # Security headers — shared snippet, since any location below with its
+    # own add_header (healthz, static assets) must include it separately too.
+    # X-XSS-Protection intentionally omitted — deprecated, removed from
+    # modern browsers, can introduce issues in older ones.
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Gzip compression
     gzip on;
@@ -60,6 +62,7 @@ server {
         access_log off;
         return 200 "healthy\n";
         add_header Content-Type text/plain;
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Deny access to hidden files
@@ -120,9 +123,13 @@ server {
         fastcgi_param PATH_INFO $fastcgi_path_info;
         fastcgi_param HTTPS $fastcgi_https if_not_empty;
 
-        # Extended timeouts for long-running scripts
-        fastcgi_read_timeout 300;
-        fastcgi_send_timeout 300;
+        # Extended timeouts for long-running scripts. Keep this >= PHP's own
+        # PHP_MAX_EXECUTION_TIME (Dokploy Environment) — nginx gives up
+        # waiting on php-fpm at this value regardless of what PHP itself is
+        # allowed to run for, so a mismatch here causes a 504 even when PHP
+        # would have finished in time.
+        fastcgi_read_timeout ${NGINX_FASTCGI_TIMEOUT};
+        fastcgi_send_timeout ${NGINX_FASTCGI_TIMEOUT};
         fastcgi_connect_timeout 60;
 
         # Buffer settings
@@ -137,6 +144,7 @@ server {
         log_not_found off;
         access_log off;
         add_header Cache-Control "public, immutable";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Robots.txt and favicon - reduce log noise

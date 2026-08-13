@@ -86,3 +86,11 @@ Make sure:
 ### Permission denied
 
 The FileBrowser container runs as root by default, which should have access to the WordPress files. If you still get permission errors, check the WordPress container's file ownership.
+
+---
+
+## Related Documentation
+
+- [Main README](../README.md) — deploying and configuring the stack
+- [Advanced Guide](./hosting-guide.md) — deeper operational topics
+- [SFTP Setup](./sftp-setup.md) — the alternative file-access method

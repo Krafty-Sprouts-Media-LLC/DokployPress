@@ -28,7 +28,7 @@ Dokploy sets `STACK_SLUG=mysite-dokploypress-8zv3p5` on create (same as the ID u
 
 In WinSCP you may browse to `/var/lib/docker/volumes/mysite_data/` first — open the **`_data` subfolder** for the WordPress root (`wp-admin`, `wp-content`, `wp-includes`).
 
-> After **Create**, open **Environment**, **replace** the auto `STACK_SLUG` with your short project name, then **Deploy**. See [README](../README.md#stack-naming).
+> After **Create**, open **Environment**, **replace** the auto `STACK_SLUG` with your short project name, then **Deploy**. See [README → Volumes](../README.md#volumes--where-your-data-lives).
 
 Related volumes for the same project:
 
@@ -69,7 +69,10 @@ SFTP_PASSWORD=YourSecurePassword123!
 SFTP_PORT=2222
 ```
 
-Click **Redeploy**. Confirm an **`sftp`** container is running.
+Click **Redeploy**. Confirm an **`sftp`** container is running **and healthy**
+in Dokploy — if it shows unhealthy, `SFTP_PASSWORD` is missing or empty (the
+container starts either way, but with no password set the account is locked
+and nobody, including you, can log in — that's intentional, not a bug).
 
 > If `SFTP_PORT` is not set on an older deploy, Docker/Dokploy may publish the SFTP container on a random host port. Check the service's published port in Dokploy or with `docker inspect`, then use that host port in your SFTP client.
 
@@ -132,6 +135,6 @@ For SFTP container connections, the WordPress root is `/public_html`. For VPS SS
 |----------|---------|-------------|
 | `COMPOSE_PROFILES` | — | Set to `tools` to start SFTP |
 | `SFTP_USER` | `wpuser` | SFTP username |
-| `SFTP_PASSWORD` | — | SFTP password (set in Dokploy) |
+| `SFTP_PASSWORD` | — | **Required** for a usable login — no default. Leaving it unset creates a locked account (no login possible for anyone, not a guessable password) and the container shows **unhealthy** in Dokploy until you set a real one. |
 | `SFTP_PORT` | `2222` | Public VPS port forwarded to the SFTP container |
 | `SFTP_UID` | `33` | File owner UID (`www-data`) |

@@ -16,6 +16,7 @@ services:
       - "80"
     environment:
       - NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-256M}
+      - NGINX_FASTCGI_TIMEOUT=${NGINX_FASTCGI_TIMEOUT:-300}
     volumes:
       - wordpress_data:/var/www/html:ro
     depends_on:
@@ -66,7 +67,7 @@ services:
           define('DISABLE_WP_CRON', true);
       - PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-256M}
       - PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-256M}
-      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-256M}
+      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-384M}
       - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-300}
       - PHP_MAX_INPUT_TIME=${PHP_MAX_INPUT_TIME:-300}
       - PHP_MAX_INPUT_VARS=${PHP_MAX_INPUT_VARS:-3000}
@@ -93,9 +94,71 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # One-shot pre-upgrade safety net for the MariaDB 10.6 → 11.8 jump. Snapshots
+  # the datadir to db_backup BEFORE 11.8 ever opens an existing 10.6 volume —
+  # this is a one-time upgrade safety net, not a recurring backup solution.
+  # No-ops on fresh installs and on volumes already upgraded to 11.x. Extra
+  # disk usage is roughly the datadir size, compressed — safe to delete the
+  # tarball from db_backup once the upgrade is verified.
+  # See docs/hosting-guide.md "Upgrading the database" for the restore steps.
+  # ---------------------------------------------------------------------------
+  db-preupgrade-snapshot:
+    image: alpine:3
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        DATADIR=/var/lib/mysql
+        BACKUP_DIR=/backup
+        MARKER_FILE="$${DATADIR}/mysql_upgrade_info"
+
+        if [ ! -f "$${DATADIR}/ibdata1" ]; then
+          echo "[db-preupgrade-snapshot] Fresh install — nothing to snapshot."
+          exit 0
+        fi
+
+        if [ ! -f "$${MARKER_FILE}" ]; then
+          echo "[db-preupgrade-snapshot] No mysql_upgrade_info marker — cannot determine prior version, skipping."
+          exit 0
+        fi
+
+        CURRENT_VERSION=$(head -1 "$${MARKER_FILE}")
+
+        case "$${CURRENT_VERSION}" in
+          11.*)
+            echo "[db-preupgrade-snapshot] Datadir already on $${CURRENT_VERSION} — no-op."
+            exit 0
+            ;;
+        esac
+
+        SAFE_VERSION=$(echo "$${CURRENT_VERSION}" | tr -c 'a-zA-Z0-9._-' '_')
+
+        if ls "$${BACKUP_DIR}"/preupgrade-"$${SAFE_VERSION}"-*.tar.gz >/dev/null 2>&1; then
+          echo "[db-preupgrade-snapshot] Snapshot for $${CURRENT_VERSION} already exists — no-op."
+          exit 0
+        fi
+
+        echo "[db-preupgrade-snapshot] Pre-11.x datadir ($${CURRENT_VERSION}) detected — snapshotting before MariaDB 11.8 opens it..."
+        mkdir -p "$${BACKUP_DIR}"
+        SNAPSHOT_NAME="preupgrade-$${SAFE_VERSION}-$(date +%Y%m%d%H%M%S).tar.gz"
+        tar -czf "$${BACKUP_DIR}/$${SNAPSHOT_NAME}" -C "$${DATADIR}" .
+        echo "[db-preupgrade-snapshot] Snapshot written to $${BACKUP_DIR}/$${SNAPSHOT_NAME}"
+    volumes:
+      - db_data:/var/lib/mysql
+      - db_backup:/backup
+    networks:
+      - internal
+    restart: on-failure
+
   db:
-    image: mariadb:10.6
+    image: mariadb:11.8
+    depends_on:
+      db-preupgrade-snapshot:
+        condition: service_completed_successfully
     environment:
+      - MARIADB_AUTO_UPGRADE=1
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=wordpress
       - MYSQL_USER=wordpress
@@ -113,7 +176,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:alpine
+    image: redis:8-alpine
     command: redis-server --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     volumes:
       - redis_data:/data
@@ -139,8 +202,13 @@ services:
       - internal
     restart: on-failure
 
+  # Optional — enable with COMPOSE_PROFILES=tools in Dokploy Environment,
+  # same as the sftp service below. Runs 24/7 attached to dokploy-network
+  # (Traefik-reachable) when enabled, so it's opt-in rather than always-on.
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
+    profiles:
+      - tools
+    image: phpmyadmin/phpmyadmin:5
     environment:
       - PMA_HOST=db
       - PMA_PORT=3306
@@ -169,7 +237,7 @@ services:
   # own pseudo-cron on page load, avoiding duplicate runs.
   # ---------------------------------------------------------------------------
   wp-cron:
-    image: alpine:latest
+    image: alpine:3
     command:
       - /bin/sh
       - -c
@@ -193,14 +261,37 @@ services:
   sftp:
     profiles:
       - tools
-    image: atmoz/sftp:latest
-    command: "${SFTP_USER:-wpuser}:${SFTP_PASSWORD:-changeme_set_in_dokploy}:${SFTP_UID:-33}"
+    # atmoz/sftp has no numbered release tags on Docker Hub — :alpine is the
+    # only non-"latest" channel it publishes. Pinned here to stay off the
+    # floating "latest" tag per this project's pinning policy (see
+    # IMPLEMENTATION_PLAN.md, Task 1).
+    image: atmoz/sftp:alpine
+    # No default password (was the guessable "changeme_set_in_dokploy" —
+    # see IMPLEMENTATION_PLAN.md, Task 4). A required-variable expansion
+    # (${SFTP_PASSWORD:?...}) was tried and rejected: Compose interpolates
+    # the whole file before profile filtering, so it broke every deploy,
+    # not just ones using the tools profile — confirmed directly with
+    # `docker compose config`, not just in theory. An empty SFTP_PASSWORD
+    # makes atmoz/sftp create the account with a locked password (`*` in
+    # /etc/shadow, confirmed directly) — no login is possible, safe by
+    # default. The healthcheck below makes that failure loud (unhealthy in
+    # Dokploy) instead of a silent "SFTP is up but nobody, including you,
+    # can log in" state.
+    command: "${SFTP_USER:-wpuser}:${SFTP_PASSWORD:-}:${SFTP_UID:-33}"
+    environment:
+      - SFTP_PASSWORD=${SFTP_PASSWORD:-}
     volumes:
       - wordpress_data:/home/${SFTP_USER:-wpuser}/public_html
     ports:
       - "${SFTP_PORT:-2222}:22"
     networks:
       - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "test -n \"$$SFTP_PASSWORD\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 
 networks:
@@ -216,3 +307,5 @@ volumes:
     name: ${STACK_SLUG:-${COMPOSE_PROJECT_NAME:-wordpress}}_db_data
   redis_data:
     name: ${STACK_SLUG:-${COMPOSE_PROJECT_NAME:-wordpress}}_redis_data
+  db_backup:
+    name: ${STACK_SLUG:-${COMPOSE_PROJECT_NAME:-wordpress}}_db_backup
