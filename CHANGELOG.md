@@ -10,6 +10,23 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [3.1.1] - 09/24/2026
+
+### Fixed
+- `docker-compose.yml`, `blueprints/dokploypress/docker-compose.yml` — **The `action-scheduler` runner reported a busy queue as a failure every minute.** Action Scheduler lets one runner work at a time (`action_scheduler_queue_runner_concurrent_batches`, default 1); when another runner or a long task holds the batch, `wp action-scheduler run` exits with `Error: There are too many concurrent batches.` The 3.0-era loop treated that as a failure — logging `action-scheduler run failed — will check again` and re-running its `wp cli has-command` check (hence a fresh `Action Scheduler found` line) every interval. Reported from a live site that still had a Dokploy **Schedule** running the same command, so two runners kept blocking each other. The loop now captures the run's output: a busy queue logs `Queue busy — another runner or a long task is working; waiting` once, is retried every interval without re-checking for Action Scheduler, and logs `Queue free again` when a run succeeds; any other error is still printed with the `run failed` line.
+
+### Changed
+- `docs/hosting-guide.md` — **Corrected:** the 3.1.0 docs said keeping an old Dokploy Schedule alongside the new container was "harmless, just redundant". Nothing runs twice or is lost, but the two runners block each other, so tasks wait longer. The section now says to delete the schedule, and explains the one-runner-at-a-time rule and the `Queue busy` / `Queue free again` log lines.
+- `README.md` — Troubleshooting: what `Queue busy` means and what to check if it never clears.
+
+### Added
+- `tests/smoke-test.sh` — Forces a busy queue (a temporary mu-plugin sets the concurrent batch limit to 0) and checks the runner logs `Queue busy` exactly once, never logs `run failed`, and logs `Queue free again` after the limit is lifted.
+
+### Operator note
+Redeploy. If you still have a Dokploy **Schedule** running `wp action-scheduler run` for this site, delete it.
+
+---
+
 ## [3.1.0] - 09/24/2026
 
 ### Added

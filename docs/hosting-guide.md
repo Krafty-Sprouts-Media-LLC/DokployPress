@@ -391,7 +391,7 @@ How it is built:
 - It runs as `www-data`, so files a task creates (for example images a plugin downloads) stay owned by WordPress. Never run the queue with `--allow-root`.
 - `PHP_MEMORY_LIMIT` is passed to WP-CLI directly (the WordPress entrypoint that normally writes the PHP settings doesn't run here).
 - It checks for the `wp action-scheduler` command before each run until it finds it, and logs a single "waiting" line meanwhile — a site with no Action Scheduler plugin costs one short WP-CLI call per interval.
-- Runs happen one after another, never overlapping; Action Scheduler's own claims also stop two runners from taking the same task.
+- Runs happen one after another, never overlapping. Action Scheduler lets **one runner work at a time** (its "concurrent batches" limit, default 1): when another runner — or a long task still in progress — holds the batch, the container logs `Queue busy — another runner or a long task is working; waiting` once, tries again every interval, and logs `Queue free again` when it gets its turn.
 
 ### Verifying it's running
 
@@ -406,7 +406,7 @@ Action Scheduler runner started. Interval: 60s
 [2026-09-24 12:00:00] Action Scheduler found — running the queue every 60s
 ```
 
-`--quiet` keeps successful runs silent; only failures are logged. The queue itself is visible in WordPress admin under **Tools → Scheduled Actions**.
+`--quiet` keeps successful runs silent; only a busy queue (once) and real failures are logged. The queue itself is visible in WordPress admin under **Tools → Scheduled Actions**.
 
 ### Settings
 
@@ -419,7 +419,7 @@ Action Scheduler runner started. Interval: 60s
 
 ### If you already added a Dokploy Schedule
 
-Sites that were running `wp action-scheduler run` from a Dokploy **Schedule** can delete that schedule after upgrading — the container does the same job without a Dokploy log entry every minute. Leaving both on is harmless (Action Scheduler never runs the same task twice), just redundant.
+**Delete it after upgrading.** Sites that were running `wp action-scheduler run` from a Dokploy **Schedule** don't need it any more — the container does the same job without a Dokploy log entry every minute. Don't keep both: nothing runs twice and nothing is lost, but the two runners take turns blocking each other (`Error: There are too many concurrent batches.` in the schedule's log, `Queue busy` in the container's), so tasks wait longer than they need to. (The 3.1.0 docs wrongly called keeping both "harmless".)
 
 ---
 

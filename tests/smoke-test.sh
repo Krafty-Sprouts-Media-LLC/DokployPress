@@ -8,7 +8,8 @@
 #   - Redis Object Cache + MilliCache plugins installed and active
 #   - wp redis status / wp millicache test / wp millicache status
 #   - MilliCache HTTP cache hit on repeat anonymous request
-#   - action-scheduler runner: runs as www-data and completes a queued action
+#   - action-scheduler runner: runs as www-data, completes a queued action,
+#     and treats a busy queue ("too many concurrent batches") as a wait, not a failure
 #
 # Usage (from repo root):
 #   bash tests/smoke-test.sh
@@ -197,6 +198,34 @@ done
 ${COMPOSE} logs action-scheduler 2>/dev/null | grep -q "Action Scheduler found" || fail "Runner did not report finding Action Scheduler"
 ${WP} rm -f /var/www/html/wp-content/mu-plugins/dokploypress-smoke-test.php
 pass "action-scheduler runner completed a queued action"
+
+info "Forcing a busy queue (concurrent batch limit 0) to check the runner waits instead of failing..."
+${WP} sh -c "printf '%s\n' '<?php' 'add_filter( \"action_scheduler_queue_runner_concurrent_batches\", \"__return_zero\" );' > /var/www/html/wp-content/mu-plugins/dokploypress-smoke-busy.php"
+BUSY=""
+for i in $(seq 1 12); do
+	if ${COMPOSE} logs action-scheduler 2>/dev/null | grep -q "Queue busy"; then
+		BUSY=1
+		break
+	fi
+	sleep 5
+done
+[ -n "${BUSY}" ] || { ${COMPOSE} logs --tail 20 action-scheduler; fail "Runner did not report a busy queue"; }
+sleep 12
+[ "$(${COMPOSE} logs action-scheduler 2>/dev/null | grep -c "Queue busy")" = "1" ] || fail "Runner logged the busy queue more than once"
+if ${COMPOSE} logs action-scheduler 2>/dev/null | grep -q "run failed"; then
+	fail "Runner treated a busy queue as a failure"
+fi
+${WP} rm -f /var/www/html/wp-content/mu-plugins/dokploypress-smoke-busy.php
+FREE=""
+for i in $(seq 1 12); do
+	if ${COMPOSE} logs action-scheduler 2>/dev/null | grep -q "Queue free again"; then
+		FREE=1
+		break
+	fi
+	sleep 5
+done
+[ -n "${FREE}" ] || fail "Runner did not resume after the queue was free"
+pass "action-scheduler runner waits on a busy queue and resumes"
 
 echo ""
 echo "=============================================="

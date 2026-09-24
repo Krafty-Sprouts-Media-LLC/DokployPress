@@ -322,6 +322,9 @@ services:
   # and volume, but not its entrypoint: no php-fpm, and none of the
   # wp-config / migration fixes (those stay with the wordpress container).
   # Idles quietly until a plugin that uses Action Scheduler is active.
+  # Action Scheduler lets one runner work at a time: when another runner (or a
+  # long task) holds the batch, this logs "Queue busy" once and tries again.
+  # Keep this the only command-line runner (no extra Dokploy Schedule).
   # Set ACTION_SCHEDULER_RUNNER=disabled to turn it off.
   # ---------------------------------------------------------------------------
   action-scheduler:
@@ -340,6 +343,7 @@ services:
         echo 'Action Scheduler runner started. Interval: ${ACTION_SCHEDULER_INTERVAL:-60}s'
         ready=""
         waiting=""
+        busy=""
         while true; do
           if [ -z "$$ready" ]; then
             if $$WP cli has-command "action-scheduler run" >/dev/null 2>&1; then
@@ -351,9 +355,29 @@ services:
               echo "[$(date '+%Y-%m-%d %H:%M:%S')] Waiting for WordPress and a plugin that uses Action Scheduler"
             fi
           fi
-          if [ -n "$$ready" ] && ! $$WP action-scheduler run --quiet; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] action-scheduler run failed — will check again"
-            ready=""
+          if [ -n "$$ready" ]; then
+            if output=$$($$WP action-scheduler run --quiet 2>&1); then
+              if [ -n "$$busy" ]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Queue free again"
+              fi
+              busy=""
+            else
+              case "$$output" in
+                *"too many concurrent batches"*)
+                  # Another runner (or a long task) holds Action Scheduler's batch: normal, try next time.
+                  if [ -z "$$busy" ]; then
+                    busy=1
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Queue busy — another runner or a long task is working; waiting"
+                  fi
+                  ;;
+                *)
+                  busy=""
+                  echo "$$output"
+                  echo "[$(date '+%Y-%m-%d %H:%M:%S')] action-scheduler run failed — will check again"
+                  ready=""
+                  ;;
+              esac
+            fi
           fi
           sleep "${ACTION_SCHEDULER_INTERVAL:-60}"
         done

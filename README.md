@@ -436,7 +436,8 @@ Check these in order — raising one without the others won't fix it:
 **Plugin background tasks (WooCommerce, Writura…) stuck or timing out**
 1. Dokploy → **Logs** → `action-scheduler` container — after the start line it should say `Action Scheduler found — running the queue every 60s`. `Waiting for WordPress and a plugin that uses Action Scheduler` means no such plugin is active yet.
 2. Check `ACTION_SCHEDULER_RUNNER` isn't set to `disabled`.
-3. To see the queue: WordPress admin → **Tools → Scheduled Actions**, or `wp action-scheduler action list --status=past-due --allow-root` inside the WordPress container.
+3. `Queue busy — another runner or a long task is working; waiting` is normal while a long task runs. If it never clears, make sure nothing else runs `wp action-scheduler run` (for example an old Dokploy **Schedule** — delete it; this container replaces it).
+4. To see the queue: WordPress admin → **Tools → Scheduled Actions**, or `wp action-scheduler action list --status=past-due --allow-root` inside the WordPress container.
 
 **Database healthcheck failing right after a MariaDB version bump**
 Expected to take a bit longer than a normal restart the first time — check the `db` container's logs for `mariadb-upgrade` output before assuming something's wrong. See [Upgrading the Database](#upgrading-the-database).
