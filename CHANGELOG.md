@@ -10,6 +10,19 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [3.1.0] - 09/24/2026
+
+### Added
+- `docker-compose.yml`, `blueprints/dokploypress/docker-compose.yml` — **New `action-scheduler` service: runs the Action Scheduler queue from WP-CLI every minute.** Plugins such as WooCommerce and Writura queue their background work with Action Scheduler. Until now it only ran through the `wp-cron` sidecar's `wp-cron.php` web request — every `WP_CRON_INTERVAL` (default 300 s), inside PHP-FPM, so long tasks were cut off at `PHP_MAX_EXECUTION_TIME` / `NGINX_FASTCGI_TIMEOUT`, and sites that needed more had to add a Dokploy Schedule by hand. The new service `extends` `wordpress` (same image, environment, volume and network), replaces the entrypoint with a loop that runs `wp action-scheduler run --quiet` every `ACTION_SCHEDULER_INTERVAL` seconds (default `60`) **as `www-data`** — so files a task creates stay owned by WordPress — with `PHP_MEMORY_LIMIT` passed to WP-CLI directly and no time limit. It never starts PHP-FPM or re-runs the WordPress container's `wp-config.php`/migration fixes, starts only after `wordpress` is healthy, and idles with a single log line until `wp action-scheduler` exists (i.e. a plugin that bundles Action Scheduler is active). New env vars: `ACTION_SCHEDULER_INTERVAL`, `ACTION_SCHEDULER_RUNNER` (`disabled` keeps it idle), `ACTION_SCHEDULER_CPU_LIMIT` (`0.5`), `ACTION_SCHEDULER_MEMORY_LIMIT` (`512M`). The existing `wp-cron` sidecar is unchanged and still handles normal WP-Cron events.
+- `tests/smoke-test.sh`, `tests/smoke-test.env` — The smoke test now checks the runner starts as `www-data`, then installs the standalone Action Scheduler plugin, queues an async test action whose hook a temporary mu-plugin handles, and verifies the runner completes it and the callback actually ran (`ACTION_SCHEDULER_INTERVAL=5` in the test env so it doesn't wait a minute). Verified locally: all smoke tests pass, including the two new runner checks. On Windows Git Bash run it with `MSYS2_ARG_CONV_EXCL="/var"` so container paths are not rewritten to Windows paths (not needed on Linux/CI).
+- `README.md` — "Action Scheduler runner" row in *What's in the stack*, a *Plugin background queues (Action Scheduler)* settings block, the two new resource-limit variables, and a troubleshooting entry for stuck or timing-out plugin background tasks.
+- `docs/hosting-guide.md` — New "Action Scheduler runner — plugin background queues" section: why it exists, how it's built, how to verify it, every setting, and what to do with a Dokploy Schedule added before this release (delete it; leaving it on is harmless but redundant).
+
+### Operator note
+Nothing to do: redeploying adds the `action-scheduler` container. If you previously created a Dokploy **Schedule** that runs `wp action-scheduler run` for this site, you can delete it once the container's log shows `Action Scheduler found`.
+
+---
+
 ## [3.0.0] - 08/13/2026
 
 > Strict semver: phpMyAdmin moving behind an opt-in profile is a breaking

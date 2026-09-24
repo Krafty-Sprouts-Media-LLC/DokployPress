@@ -34,6 +34,7 @@ One deploy starts these containers, already talking to each other correctly:
 | **Redis** | One shared cache used two ways: WordPress object caching, and full-page caching (see MilliCache below). |
 | **Plugin Installer** | Runs once on first deploy, installs the Redis Object Cache and MilliCache plugins for you. |
 | **WP-Cron** | Triggers WordPress's scheduled tasks (scheduled posts, cleanup jobs, etc.) every 5 minutes, reliably — instead of relying on a visitor happening to load the site. |
+| **Action Scheduler runner** | Runs the background queue that WooCommerce, Writura and many other plugins use (Action Scheduler) every minute from the command line, with no PHP time limit. Sits idle until such a plugin is active. |
 | **phpMyAdmin** *(optional)* | A web UI for browsing/editing the database directly. Off by default — see [Optional tools](#optional-tools-phpmyadmin--sftp). |
 | **SFTP** *(optional)* | A dedicated file-transfer login, separate from your server's own SSH login. Off by default — see [Optional tools](#optional-tools-phpmyadmin--sftp). |
 
@@ -240,6 +241,8 @@ REDIS_CPU_LIMIT=0.5
 REDIS_MEMORY_LIMIT=512M
 NGINX_CPU_LIMIT=0.5
 NGINX_MEMORY_LIMIT=256M
+ACTION_SCHEDULER_CPU_LIMIT=0.5
+ACTION_SCHEDULER_MEMORY_LIMIT=512M
 ```
 
 These defaults are sized to just work for one site (or a few) on a typical server, with no tuning. They're **not** the right numbers if you're running many WordPress sites on the same server — memory can't safely be oversubscribed the way CPU can (an over-limit container gets killed, not just slowed down). If that's your situation, don't touch these repo defaults; instead set smaller, host-specific values per site in each site's own Dokploy Environment tab. The math for working out those numbers: total available RAM × 0.6, divided across every site/app sharing the server, weighted by how many containers each one runs.
@@ -253,6 +256,17 @@ WP_CRON_INTERVAL=300
 ```
 
 `DISABLE_WP_CRON=true` is set for you automatically — WordPress's own page-load-triggered pseudo-cron is turned off so this sidecar is the only scheduler. Nothing to configure there.
+
+### Plugin background queues (Action Scheduler)
+
+```env
+# How often (seconds) the action-scheduler container runs `wp action-scheduler run`.
+ACTION_SCHEDULER_INTERVAL=60
+# Set to "disabled" to turn the runner off (the container then just sleeps).
+ACTION_SCHEDULER_RUNNER=enabled
+```
+
+Plugins such as WooCommerce and Writura queue their background work with **Action Scheduler**. Through `wp-cron.php` those tasks only run every `WP_CRON_INTERVAL` and are cut off by the web time limits (`PHP_MAX_EXECUTION_TIME`, `NGINX_FASTCGI_TIMEOUT`). The `action-scheduler` container runs the queue from WP-CLI every minute instead, as `www-data` (so files it creates stay owned by WordPress) and with no time limit. It uses the same image, settings and files as the WordPress container, and does nothing until a plugin that uses Action Scheduler is active. With it running you don't need a separate Dokploy Schedule for `wp action-scheduler run`.
 
 ### Multisite (running more than one site from one WordPress install)
 
@@ -418,6 +432,11 @@ Check these in order — raising one without the others won't fix it:
 **Scheduled posts / cron jobs running late**
 1. Dokploy → **Logs** → `wp-cron` container — you should see a trigger line every `WP_CRON_INTERVAL` seconds (default 300).
 2. `wp cron event run --due-now --allow-root` inside the WordPress container to run everything due right now.
+
+**Plugin background tasks (WooCommerce, Writura…) stuck or timing out**
+1. Dokploy → **Logs** → `action-scheduler` container — after the start line it should say `Action Scheduler found — running the queue every 60s`. `Waiting for WordPress and a plugin that uses Action Scheduler` means no such plugin is active yet.
+2. Check `ACTION_SCHEDULER_RUNNER` isn't set to `disabled`.
+3. To see the queue: WordPress admin → **Tools → Scheduled Actions**, or `wp action-scheduler action list --status=past-due --allow-root` inside the WordPress container.
 
 **Database healthcheck failing right after a MariaDB version bump**
 Expected to take a bit longer than a normal restart the first time — check the `db` container's logs for `mariadb-upgrade` output before assuming something's wrong. See [Upgrading the Database](#upgrading-the-database).

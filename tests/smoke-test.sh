@@ -8,6 +8,7 @@
 #   - Redis Object Cache + MilliCache plugins installed and active
 #   - wp redis status / wp millicache test / wp millicache status
 #   - MilliCache HTTP cache hit on repeat anonymous request
+#   - action-scheduler runner: runs as www-data and completes a queued action
 #
 # Usage (from repo root):
 #   bash tests/smoke-test.sh
@@ -169,6 +170,33 @@ ${WP} bash -c 'php -r "
 echo \$r->ping() ? \"PONG\n\" : \"FAIL\n\";
 "' | grep -q "PONG"
 pass "PHP Redis extension can reach redis container"
+
+info "Checking the Action Scheduler runner..."
+${COMPOSE} logs action-scheduler 2>/dev/null | grep -q "Action Scheduler runner started" || fail "action-scheduler runner loop did not start"
+AS_USER=$(${COMPOSE} exec -T action-scheduler whoami | tr -d '[:space:]')
+[ "${AS_USER}" = "www-data" ] || fail "action-scheduler runs as '${AS_USER}', expected www-data"
+pass "action-scheduler runner started as www-data"
+
+info "Installing the standalone Action Scheduler plugin to give the runner work..."
+${WP} wp plugin install action-scheduler --activate --allow-root >/dev/null
+${WP} chown -R www-data:www-data /var/www/html/wp-content/plugins/action-scheduler
+# A hook with a callback: Action Scheduler fails actions nobody listens to.
+${WP} sh -c "printf '%s\n' '<?php' 'add_action( \"dokploypress_smoke_test\", static function () { update_option( \"dokploypress_smoke_ran\", \"yes\" ); } );' > /var/www/html/wp-content/mu-plugins/dokploypress-smoke-test.php"
+# Prints e.g. "Success: Action (42) scheduled." -- take the number.
+ACTION_ID=$(${WP} wp action-scheduler action create dokploypress_smoke_test async --group=dokploypress-smoke --allow-root | grep -o "[0-9][0-9]*" | head -1)
+[ -n "${ACTION_ID}" ] || fail "Could not queue a test action"
+info "Queued test action ${ACTION_ID}; waiting for the runner to complete it..."
+STATUS=""
+for i in $(seq 1 24); do
+	STATUS=$(${WP} wp action-scheduler action get "${ACTION_ID}" --field=status --allow-root 2>/dev/null | tr -d '[:space:]' || true)
+	[ "${STATUS}" = "complete" ] && break
+	sleep 5
+done
+[ "${STATUS}" = "complete" ] || { ${COMPOSE} logs --tail 20 action-scheduler; fail "Test action ${ACTION_ID} not completed by the runner (status: ${STATUS:-unknown})"; }
+[ "$(${WP} wp option get dokploypress_smoke_ran --allow-root 2>/dev/null | tr -d '[:space:]')" = "yes" ] || fail "Test action callback did not run"
+${COMPOSE} logs action-scheduler 2>/dev/null | grep -q "Action Scheduler found" || fail "Runner did not report finding Action Scheduler"
+${WP} rm -f /var/www/html/wp-content/mu-plugins/dokploypress-smoke-test.php
+pass "action-scheduler runner completed a queued action"
 
 echo ""
 echo "=============================================="

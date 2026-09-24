@@ -14,6 +14,7 @@
 - [Migrating an existing WordPress site onto this stack](#migrating-wordpress-sites-from-local-disk)
 - [How MilliCache full-page caching works](#millicache-full-page-caching-built-in)
 - [How the WP-Cron sidecar works](#wp-cron--reliable-scheduled-tasks)
+- [How the Action Scheduler runner works](#action-scheduler-runner--plugin-background-queues)
 - [WordPress Multisite — full setup walkthrough](#wordpress-multisite)
 - [How updates reach an existing deployment](#how-updates-reach-an-existing-deployment)
 
@@ -367,6 +368,58 @@ If you want to manage WP-Cron yourself (host-level system cron, Cronicle, etc.):
 1. Remove the `wp-cron:` service block from your compose file.
 2. Add `DISABLE_WP_CRON=false` to Dokploy Environment (or otherwise stop the stack from forcing it on).
 3. Redeploy.
+
+---
+
+## Action Scheduler runner — plugin background queues
+
+Many plugins (WooCommerce, Writura, Rank Math, WP Mail SMTP…) queue their background work with [Action Scheduler](https://actionscheduler.org/) instead of plain WP-Cron events. Action Scheduler can run from `wp-cron.php`, but on this stack that means:
+
+- tasks only get a turn every `WP_CRON_INTERVAL` (default 5 minutes), and
+- each run is a web request through Nginx and PHP-FPM, so a long task (an import, an AI article, a large export) is cut off at `PHP_MAX_EXECUTION_TIME` / `NGINX_FASTCGI_TIMEOUT` (default 300 s).
+
+The `action-scheduler` container fixes both by running the queue from the command line:
+
+```
+[action-scheduler container] ──every 60 s──► wp action-scheduler run   (as www-data, no time limit)
+```
+
+How it is built:
+
+- It `extends` the `wordpress` service, so it has exactly the same image, environment (database, Redis, `WORDPRESS_CONFIG_EXTRA`, your own variables) and `wordpress_data` volume.
+- It replaces the entrypoint, so it never starts PHP-FPM and never re-runs the WordPress container's `wp-config.php` or migration fixes.
+- It runs as `www-data`, so files a task creates (for example images a plugin downloads) stay owned by WordPress. Never run the queue with `--allow-root`.
+- `PHP_MEMORY_LIMIT` is passed to WP-CLI directly (the WordPress entrypoint that normally writes the PHP settings doesn't run here).
+- It checks for the `wp action-scheduler` command before each run until it finds it, and logs a single "waiting" line meanwhile — a site with no Action Scheduler plugin costs one short WP-CLI call per interval.
+- Runs happen one after another, never overlapping; Action Scheduler's own claims also stop two runners from taking the same task.
+
+### Verifying it's running
+
+```bash
+docker logs <compose-name>-action-scheduler-1 --tail 20
+```
+
+Expected:
+
+```
+Action Scheduler runner started. Interval: 60s
+[2026-09-24 12:00:00] Action Scheduler found — running the queue every 60s
+```
+
+`--quiet` keeps successful runs silent; only failures are logged. The queue itself is visible in WordPress admin under **Tools → Scheduled Actions**.
+
+### Settings
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ACTION_SCHEDULER_INTERVAL` | `60` | Seconds between runs. |
+| `ACTION_SCHEDULER_RUNNER` | `enabled` | `disabled` keeps the container idle. |
+| `ACTION_SCHEDULER_CPU_LIMIT` | `0.5` | CPU limit for the runner. |
+| `ACTION_SCHEDULER_MEMORY_LIMIT` | `512M` | Memory limit for the runner container. |
+
+### If you already added a Dokploy Schedule
+
+Sites that were running `wp action-scheduler run` from a Dokploy **Schedule** can delete that schedule after upgrading — the container does the same job without a Dokploy log entry every minute. Leaving both on is harmless (Action Scheduler never runs the same task twice), just redundant.
 
 ---
 

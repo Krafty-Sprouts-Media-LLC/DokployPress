@@ -5,7 +5,7 @@
 # Not affiliated with or endorsed by Dokploy.
 #
 # Services: nginx, wordpress, db (MariaDB), redis, plugin-installer,
-#           phpmyadmin, wp-cron, sftp (optional, tools profile)
+#           phpmyadmin, wp-cron, action-scheduler, sftp (optional, tools profile)
 #
 # @package DokployPress
 # @since   1.0.0
@@ -308,6 +308,65 @@ services:
         limits:
           cpus: "0.05"
           memory: "32M"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Action Scheduler runner — runs `wp action-scheduler run` from the command
+  # line every ACTION_SCHEDULER_INTERVAL seconds (default 60), as www-data.
+  #
+  # Action Scheduler is the background queue WooCommerce, Writura and many
+  # other plugins use. Run through wp-cron.php (the wp-cron sidecar above) its
+  # tasks share PHP-FPM's PHP_MAX_EXECUTION_TIME / NGINX_FASTCGI_TIMEOUT limits
+  # and only get a turn every WP_CRON_INTERVAL; from the command line they have
+  # no time limit and run every minute. Reuses the WordPress image, environment
+  # and volume, but not its entrypoint: no php-fpm, and none of the
+  # wp-config / migration fixes (those stay with the wordpress container).
+  # Idles quietly until a plugin that uses Action Scheduler is active.
+  # Set ACTION_SCHEDULER_RUNNER=disabled to turn it off.
+  # ---------------------------------------------------------------------------
+  action-scheduler:
+    extends:
+      service: wordpress
+    user: www-data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ "${ACTION_SCHEDULER_RUNNER:-enabled}" = "disabled" ]; then
+          echo 'Action Scheduler runner disabled (ACTION_SCHEDULER_RUNNER=disabled).'
+          exec sleep infinity
+        fi
+        export WP_CLI_CACHE_DIR=/tmp/wp-cli-cache
+        WP="php -d memory_limit=${PHP_MEMORY_LIMIT:-384M} /usr/local/bin/wp --path=/var/www/html"
+        echo 'Action Scheduler runner started. Interval: ${ACTION_SCHEDULER_INTERVAL:-60}s'
+        ready=""
+        waiting=""
+        while true; do
+          if [ -z "$$ready" ]; then
+            if $$WP cli has-command "action-scheduler run" >/dev/null 2>&1; then
+              ready=1
+              waiting=""
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] Action Scheduler found — running the queue every ${ACTION_SCHEDULER_INTERVAL:-60}s"
+            elif [ -z "$$waiting" ]; then
+              waiting=1
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] Waiting for WordPress and a plugin that uses Action Scheduler"
+            fi
+          fi
+          if [ -n "$$ready" ] && ! $$WP action-scheduler run --quiet; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] action-scheduler run failed — will check again"
+            ready=""
+          fi
+          sleep "${ACTION_SCHEDULER_INTERVAL:-60}"
+        done
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          cpus: "${ACTION_SCHEDULER_CPU_LIMIT:-0.5}"
+          memory: "${ACTION_SCHEDULER_MEMORY_LIMIT:-512M}"
     restart: unless-stopped
 
   # Optional — enable with COMPOSE_PROFILES=tools in Dokploy Environment.
