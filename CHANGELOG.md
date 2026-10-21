@@ -10,6 +10,16 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [3.1.2] - 21/10/2026
+
+### Security
+- `wordpress` image — **Rebuilt on PHP 8.4.27 to fix two critical unauthenticated remote code execution vulnerabilities, CVE-2026-109618 and CVE-2026-109619** ([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)). The 3.1.1 image was built on `wordpress:php8.4-fpm` when it shipped PHP 8.4.25; every PHP 8.4 release before 8.4.27 is affected, and PHP-FPM is listed as at risk. `wordpress/Dockerfile` is unchanged — it already follows `wordpress:php8.4-fpm`, which Docker Hub republished with PHP 8.4.27 on 21 Oct 2026. This release exists to build and publish new image tags on that base. Fixes #9.
+
+### Operator note
+**Redeploy every site now.** Restarting a container is not enough — it keeps the PHP inside the old image. After redeploying, `docker exec <wordpress-container> php -v` must report `PHP 8.4.27`.
+
+---
+
 ## [3.1.1] - 09/24/2026
 
 ### Fixed
