@@ -10,6 +10,22 @@ Upstream project: [itsmereal/dokploy-wp](https://github.com/itsmereal/dokploy-wp
 
 ---
 
+## [3.2.0] - 23/10/2026
+
+### Fixed
+- `nginx/default.conf.template` — **502 Bad Gateway on every PHP request after a redeploy that recreated only the `wordpress` container.** Nginx resolved `wordpress` once at startup, so when Compose recreated `wordpress` (any WordPress/PHP/Redis environment change) and it came back on a new IP, Nginx kept sending requests to the old one until Nginx itself was restarted. The Nginx container stayed "healthy" throughout, because `/healthz` never touches PHP. Seen in production on animalofthings.com: `wordpress` "Up 7 minutes", `nginx` "Up 29 hours", site down with 502. The upstream now re-resolves through Docker's embedded DNS (`resolver 127.0.0.11 valid=10s`, `zone`, `server wordpress:9000 resolve` — open-source Nginx 1.27.3+, image is `nginx:1.30-alpine`). Verified: forced a recreated `wordpress` onto a new IP (`.4` → `.6`) without restarting Nginx, and the front page still returned 200. Fixes #11.
+
+### Added
+- `docker-compose.yml`, `blueprints/dokploypress/docker-compose.yml` — **New `DB_INNODB_BUFFER_POOL_SIZE` (default `128M`) sets how much memory MariaDB uses to keep data in memory.** The `db` service never set `innodb_buffer_pool_size`, so MariaDB stayed at its built-in 128 MB however large `DB_MEMORY_LIMIT` was. On large sites the posts and postmeta tables don't fit, so MariaDB reads from disk: Media Library searches took over a minute on animalofthings.com (11k articles, 20k media), and uncached pages and every admin screen were slow. The default keeps today's 128 MB, so no site changes unless it opts in. Verified: with `DB_INNODB_BUFFER_POOL_SIZE=256M`, `SELECT @@innodb_buffer_pool_size` reports 256 MB and the full smoke test passes. Fixes #12.
+- `README.md` — `DB_INNODB_BUFFER_POOL_SIZE` in *Resource limits* with sizing guidance (about two-thirds of `DB_MEMORY_LIMIT` on a large site), and a troubleshooting entry for slow Media Library search and admin screens.
+
+### Operator note
+- **GitHub-linked sites** (compose path `./blueprints/dokploypress/docker-compose.yml`): Redeploy. On large sites, add `DB_INNODB_BUFFER_POOL_SIZE` (e.g. `1G` with `DB_MEMORY_LIMIT=1.5G`) to the Environment tab first.
+- **Sites created from the one-click template** keep their own copy of the compose file. Change the three `dokploypress-` image tags to `:3.2.0` for the Nginx fix. For the database setting, also add this line under `image: mariadb:11.8` in the `db` service: `command: --innodb-buffer-pool-size=${DB_INNODB_BUFFER_POOL_SIZE:-128M}`.
+- This redeploy recreates `nginx` along with the other services, so it comes up with the fix. After that, recreating `wordpress` alone no longer causes a 502.
+
+---
+
 ## [3.1.2] - 21/10/2026
 
 ### Security

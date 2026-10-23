@@ -243,6 +243,12 @@ NGINX_CPU_LIMIT=0.5
 NGINX_MEMORY_LIMIT=256M
 ACTION_SCHEDULER_CPU_LIMIT=0.5
 ACTION_SCHEDULER_MEMORY_LIMIT=512M
+
+# How much of DB_MEMORY_LIMIT MariaDB actually uses to keep data in memory.
+# DB_MEMORY_LIMIT alone doesn't raise this — MariaDB stays at 128M unless you
+# set it. On a large site (tens of thousands of posts or more), set it to
+# about two-thirds of DB_MEMORY_LIMIT, e.g. DB_MEMORY_LIMIT=1.5G → 1G.
+DB_INNODB_BUFFER_POOL_SIZE=128M
 ```
 
 These defaults are sized to just work for one site (or a few) on a typical server, with no tuning. They're **not** the right numbers if you're running many WordPress sites on the same server — memory can't safely be oversubscribed the way CPU can (an over-limit container gets killed, not just slowed down). If that's your situation, don't touch these repo defaults; instead set smaller, host-specific values per site in each site's own Dokploy Environment tab. The math for working out those numbers: total available RAM × 0.6, divided across every site/app sharing the server, weighted by how many containers each one runs.
@@ -419,6 +425,9 @@ Check these in order — raising one without the others won't fix it:
 1. `PHP_MAX_EXECUTION_TIME` — is PHP itself even allowed to run that long?
 2. `NGINX_FASTCGI_TIMEOUT` — must be `>=` the value above, or Nginx gives up on PHP first regardless of PHP's own limit.
 3. If both are raised and it *still* 504s, the issue is one layer further out — Dokploy's own Traefik reverse proxy, which this stack doesn't control. That's a Dokploy-side thing to check next, not a setting in this repo.
+
+**Media Library search or admin lists take a minute or more on a large site**
+MariaDB is probably reading from disk because its in-memory cache is still the 128M default. Set `DB_INNODB_BUFFER_POOL_SIZE` (see [Resource limits](#resource-limits-how-much-cpumemory-each-container-gets)) and redeploy.
 
 **Redis not connecting**
 1. Check the `redis` container is healthy in Dokploy.

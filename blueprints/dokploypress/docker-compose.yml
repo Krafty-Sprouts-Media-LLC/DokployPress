@@ -154,6 +154,9 @@ services:
 
   db:
     image: mariadb:11.8
+    # MariaDB ignores the container memory limit when sizing its cache;
+    # without this it stays at its built-in 128M however large DB_MEMORY_LIMIT is.
+    command: --innodb-buffer-pool-size=${DB_INNODB_BUFFER_POOL_SIZE:-128M}
     depends_on:
       db-preupgrade-snapshot:
         condition: service_completed_successfully

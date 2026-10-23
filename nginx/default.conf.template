@@ -29,8 +29,14 @@ map "$tls_via_xfp$tls_via_cfv" $fastcgi_https {
     ~1      on;
 }
 
+# Re-resolve "wordpress" through Docker's embedded DNS instead of only at
+# startup — a recreated wordpress container can get a new IP, and a stale one
+# turns every PHP request into a 502 until nginx itself restarts.
+resolver 127.0.0.11 valid=10s ipv6=off;
+
 upstream php-fpm {
-    server wordpress:9000;
+    zone php-fpm 64k;
+    server wordpress:9000 resolve;
 }
 
 server {
